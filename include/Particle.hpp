@@ -1,6 +1,6 @@
 #pragma once
 
-#include "raylib.h"
+#include "RaylibCompat.hpp"
 
 class Particle {
 public:
@@ -9,6 +9,8 @@ public:
     void Update(float dt);
     void Draw() const;
     bool IsDead() const;
+    Vector2 GetPosition() const;
+    float GetLife() const;
 
 private:
     Vector2 position_{};

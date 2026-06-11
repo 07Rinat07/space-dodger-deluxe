@@ -5,35 +5,94 @@
 #include <algorithm>
 #include <ctime>
 #include <cmath>
+#include <vector>
 #include <sstream>
+
+#ifndef UNIT_TEST
+namespace {
+Sound CreateTone(float frequency, float duration, float volume) {
+    constexpr int sampleRate = 22050;
+    const int frameCount = static_cast<int>(static_cast<float>(sampleRate) * duration);
+    std::vector<short> samples(static_cast<std::size_t>(frameCount));
+
+    for (int i = 0; i < frameCount; ++i) {
+        const float t = static_cast<float>(i) / static_cast<float>(sampleRate);
+        const float envelope = 1.0f - t / duration;
+        samples[static_cast<std::size_t>(i)] = static_cast<short>(std::sin(2.0f * PI * frequency * t) * 32000.0f * volume * envelope);
+    }
+
+    Wave wave{};
+    wave.frameCount = static_cast<unsigned int>(frameCount);
+    wave.sampleRate = sampleRate;
+    wave.sampleSize = 16;
+    wave.channels = 1;
+    wave.data = samples.data();
+    return LoadSoundFromWave(wave);
+}
+}
+#endif
 
 Game::Game()
     : starfield_(150), rng_(static_cast<unsigned int>(std::time(nullptr))) {
     InitWindow(cfg::ScreenWidth, cfg::ScreenHeight, cfg::WindowTitle);
     SetExitKey(KEY_NULL);
     SetTargetFPS(cfg::TargetFps);
-    highScore_ = Storage::LoadHighScore();
+    saveData_ = Storage::Load();
+    highScore_ = saveData_.highScore;
+#ifndef UNIT_TEST
+    InitializeAudio();
+#endif
 }
 
 Game::~Game() {
-    CloseWindow();
+#ifndef UNIT_TEST
+    ShutdownAudio();
+#endif
+    if (IsWindowReady()) {
+        CloseWindow();
+    }
 }
 
 void Game::Run() {
-    while (!WindowShouldClose()) {
+    while (!WindowShouldClose() && !exitRequested_) {
         const float dt = GetFrameTime();
         HandleInput();
+        if (exitRequested_) {
+            break;
+        }
         Update(dt);
         Draw();
     }
 }
 
 void Game::HandleInput() {
-    if (IsKeyPressed(KEY_ENTER) && state_ == GameState::Menu) {
+    if ((IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER) || IsKeyPressed(KEY_SPACE)) && state_ == GameState::Menu) {
         StartNewGame();
     }
 
-    if (IsKeyPressed(KEY_R) && state_ == GameState::GameOver) {
+    if (IsKeyPressed(KEY_S) && state_ == GameState::Menu) {
+        state_ = GameState::Settings;
+    }
+
+    if (state_ == GameState::Settings) {
+        if (IsKeyPressed(KEY_D) || IsKeyPressed(KEY_RIGHT)) {
+            saveData_.difficulty = NextDifficulty(saveData_.difficulty);
+            SaveSettings();
+        }
+        if (IsKeyPressed(KEY_M)) {
+            saveData_.musicEnabled = !saveData_.musicEnabled;
+            SaveSettings();
+        }
+        if (IsKeyPressed(KEY_N)) {
+            saveData_.soundEnabled = !saveData_.soundEnabled;
+            SaveSettings();
+        }
+        if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER)) {
+            state_ = GameState::Menu;
+        }
+    }
+
+    if ((IsKeyPressed(KEY_R) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER) || IsKeyPressed(KEY_SPACE)) && state_ == GameState::GameOver) {
         StartNewGame();
     }
 
@@ -41,11 +100,15 @@ void Game::HandleInput() {
         TogglePause();
     }
 
+    if ((IsKeyDown(KEY_SPACE) || IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)) && state_ == GameState::Playing) {
+        FireBullet();
+    }
+
     if (IsKeyPressed(KEY_ESCAPE)) {
-        if (state_ == GameState::Playing || state_ == GameState::Paused || state_ == GameState::GameOver) {
-            state_ = GameState::Menu;
+        if (state_ == GameState::Menu) {
+            exitRequested_ = true;
         } else {
-            // raylib will close the window automatically by the default ESC behavior.
+            state_ = GameState::Menu;
         }
     }
 }
@@ -53,6 +116,9 @@ void Game::HandleInput() {
 void Game::Update(float dt) {
     starfield_.Update(dt);
     UpdateParticles(dt);
+#ifndef UNIT_TEST
+    UpdateMusic();
+#endif
 
     if (state_ == GameState::Playing) {
         UpdatePlaying(dt);
@@ -80,6 +146,9 @@ void Game::Draw() const {
             DrawPlaying();
             DrawGameOver();
             break;
+        case GameState::Settings:
+            DrawSettings();
+            break;
     }
 
     EndDrawing();
@@ -89,6 +158,7 @@ void Game::StartNewGame() {
     state_ = GameState::Playing;
     player_.Reset();
     asteroids_.clear();
+    bullets_.clear();
     pickups_.clear();
     particles_.clear();
     score_ = 0;
@@ -97,6 +167,7 @@ void Game::StartNewGame() {
     difficulty_ = 1.0f;
     asteroidSpawnTimer_ = 0.0f;
     pickupSpawnTimer_ = 3.0f;
+    shotCooldown_ = 0.0f;
 }
 
 void Game::TogglePause() {
@@ -113,26 +184,47 @@ void Game::FinishGame() {
 
     if (score_ > highScore_) {
         highScore_ = score_;
-        Storage::SaveHighScore(highScore_);
+        saveData_.highScore = highScore_;
+        Storage::Save(saveData_);
     }
+#ifndef UNIT_TEST
+    PlayExplosionSound();
+#endif
 }
 
 void Game::SpawnAsteroid() {
-    const float radius = RandomFloat(cfg::AsteroidMinRadius, cfg::AsteroidMaxRadius);
+    const int roll = RandomInt(0, 100);
+    const AsteroidType type = roll < 18 ? AsteroidType::Fast : (roll > 82 ? AsteroidType::Heavy : AsteroidType::Rock);
+    const float typeRadiusBonus = type == AsteroidType::Heavy ? 16.0f : (type == AsteroidType::Fast ? -6.0f : 0.0f);
+    const float radius = std::max(14.0f, RandomFloat(cfg::AsteroidMinRadius, cfg::AsteroidMaxRadius) + typeRadiusBonus);
     const float x = RandomFloat(radius, cfg::ScreenWidth - radius);
     const float y = -radius - RandomFloat(0.0f, 80.0f);
 
-    const float horizontalDrift = RandomFloat(-80.0f, 80.0f);
-    const float verticalSpeed = cfg::AsteroidBaseSpeed * difficulty_ + RandomFloat(0.0f, 120.0f);
+    const float typeSpeed = type == AsteroidType::Fast ? 1.55f : (type == AsteroidType::Heavy ? 0.78f : 1.0f);
+    const float horizontalDrift = RandomFloat(-80.0f, 80.0f) * typeSpeed;
+    const float verticalSpeed = (cfg::AsteroidBaseSpeed * difficulty_ + RandomFloat(0.0f, 120.0f)) * DifficultySpeedMultiplier(saveData_.difficulty) * typeSpeed;
     const float rotationSpeed = RandomFloat(-2.5f, 2.5f);
 
-    asteroids_.emplace_back(Vector2{x, y}, Vector2{horizontalDrift, verticalSpeed}, radius, rotationSpeed);
+    asteroids_.emplace_back(Vector2{x, y}, Vector2{horizontalDrift, verticalSpeed}, radius, rotationSpeed, type);
 }
 
 void Game::SpawnPickup() {
     const float x = RandomFloat(40.0f, cfg::ScreenWidth - 40.0f);
     const PickupType type = (RandomInt(0, 100) < 72) ? PickupType::Score : PickupType::Shield;
     pickups_.emplace_back(Vector2{x, -25.0f}, type);
+}
+
+void Game::FireBullet() {
+    if (shotCooldown_ > 0.0f) {
+        return;
+    }
+
+    const Vector2 playerPosition = player_.GetPosition();
+    bullets_.emplace_back(Vector2{playerPosition.x, playerPosition.y - player_.GetRadius() - 18.0f}, cfg::BulletSpeed);
+    shotCooldown_ = cfg::ShotCooldown;
+#ifndef UNIT_TEST
+    PlayShotSound();
+#endif
 }
 
 void Game::SpawnExplosion(Vector2 position, Color color, int count) {
@@ -148,6 +240,11 @@ void Game::SpawnExplosion(Vector2 position, Color color, int count) {
     }
 }
 
+void Game::SaveSettings() {
+    saveData_.highScore = highScore_;
+    Storage::Save(saveData_);
+}
+
 void Game::UpdatePlaying(float dt) {
     survivedTime_ += dt;
     difficulty_ = 1.0f + survivedTime_ / 45.0f;
@@ -155,14 +252,15 @@ void Game::UpdatePlaying(float dt) {
     // Score consists of two parts:
     // 1) survival points, calculated from total survived time;
     // 2) bonus points, received from pickups and shield collisions.
-    score_ = static_cast<int>(survivedTime_ * 10.0f) + bonusScore_;
+    score_ = static_cast<int>(survivedTime_ * static_cast<float>(DifficultyScoreMultiplier(saveData_.difficulty))) + bonusScore_;
 
     player_.Update(dt);
+    shotCooldown_ = std::max(0.0f, shotCooldown_ - dt);
 
     asteroidSpawnTimer_ -= dt;
     if (asteroidSpawnTimer_ <= 0.0f) {
         SpawnAsteroid();
-        const float dynamicDelay = std::max(cfg::MinSpawnDelay, cfg::InitialSpawnDelay - survivedTime_ * 0.008f);
+        const float dynamicDelay = std::max(cfg::MinSpawnDelay, cfg::InitialSpawnDelay - survivedTime_ * 0.008f) * DifficultySpawnMultiplier(saveData_.difficulty);
         asteroidSpawnTimer_ = dynamicDelay;
     }
 
@@ -174,6 +272,10 @@ void Game::UpdatePlaying(float dt) {
 
     for (Asteroid& asteroid : asteroids_) {
         asteroid.Update(dt);
+    }
+
+    for (Bullet& bullet : bullets_) {
+        bullet.Update(dt);
     }
 
     for (Pickup& pickup : pickups_) {
@@ -197,7 +299,66 @@ void Game::UpdateParticles(float dt) {
     );
 }
 
+void Game::UpdateMusic() {
+#ifndef UNIT_TEST
+    if (!audioReady_) {
+        return;
+    }
+
+    if (!saveData_.musicEnabled) {
+        if (IsAudioStreamPlaying(musicStream_)) {
+            StopAudioStream(musicStream_);
+        }
+        return;
+    }
+
+    if (!IsAudioStreamPlaying(musicStream_)) {
+        PlayAudioStream(musicStream_);
+    }
+
+    if (IsAudioStreamProcessed(musicStream_)) {
+        constexpr int sampleRate = 22050;
+        constexpr int frames = 512;
+        constexpr float melody[] = {220.0f, 277.18f, 329.63f, 246.94f};
+        musicBuffer_.resize(frames);
+        for (int i = 0; i < frames; ++i) {
+            const int beat = static_cast<int>(musicPhase_ * 2.0f) % 4;
+            const float frequency = melody[beat];
+            const float tone = std::sin(2.0f * PI * frequency * musicPhase_) * 0.16f;
+            const float bass = std::sin(2.0f * PI * (frequency * 0.5f) * musicPhase_) * 0.09f;
+            musicBuffer_[static_cast<std::size_t>(i)] = static_cast<short>((tone + bass) * 28000.0f);
+            musicPhase_ += 1.0f / static_cast<float>(sampleRate);
+        }
+        UpdateAudioStream(musicStream_, musicBuffer_.data(), frames);
+    }
+#endif
+}
+
 void Game::CheckCollisions() {
+    for (auto bulletIt = bullets_.begin(); bulletIt != bullets_.end();) {
+        bool bulletRemoved = false;
+        for (auto asteroidIt = asteroids_.begin(); asteroidIt != asteroids_.end(); ++asteroidIt) {
+            if (CirclesCollide(bulletIt->GetPosition(), bulletIt->GetRadius(), asteroidIt->GetPosition(), asteroidIt->GetRadius())) {
+                SpawnExplosion(bulletIt->GetPosition(), ORANGE, 8);
+                if (asteroidIt->TakeDamage(1)) {
+                    bonusScore_ += asteroidIt->GetScoreValue();
+                    SpawnExplosion(asteroidIt->GetPosition(), GOLD, 18);
+                    asteroids_.erase(asteroidIt);
+#ifndef UNIT_TEST
+                    PlayExplosionSound();
+#endif
+                }
+                bulletIt = bullets_.erase(bulletIt);
+                bulletRemoved = true;
+                break;
+            }
+        }
+
+        if (!bulletRemoved) {
+            ++bulletIt;
+        }
+    }
+
     for (auto asteroidIt = asteroids_.begin(); asteroidIt != asteroids_.end(); ++asteroidIt) {
         if (CirclesCollide(player_.GetPosition(), player_.GetRadius(), asteroidIt->GetPosition(), asteroidIt->GetRadius() * 0.82f)) {
             if (player_.HasShield()) {
@@ -206,6 +367,9 @@ void Game::CheckCollisions() {
                 SpawnExplosion(asteroidIt->GetPosition(), SKYBLUE, 28);
                 bonusScore_ += 25;
                 asteroids_.erase(asteroidIt);
+#ifndef UNIT_TEST
+                PlayExplosionSound();
+#endif
             } else {
                 FinishGame();
             }
@@ -223,6 +387,9 @@ void Game::CheckCollisions() {
                     player_.ActivateShield(5.0f);
                     SpawnExplosion(pickup.GetPosition(), BLUE, 22);
                 }
+#ifndef UNIT_TEST
+                PlayPickupSound();
+#endif
                 return true;
             }
             return false;
@@ -245,21 +412,40 @@ void Game::RemoveDeadObjects() {
         }),
         pickups_.end()
     );
+
+    bullets_.erase(
+        std::remove_if(bullets_.begin(), bullets_.end(), [](const Bullet& bullet) {
+            return bullet.IsOffScreen();
+        }),
+        bullets_.end()
+    );
 }
 
 void Game::DrawMenu() const {
     DrawRectangle(0, 0, cfg::ScreenWidth, cfg::ScreenHeight, Fade(BLACK, 0.25f));
     DrawCenteredText("SPACE DODGER DELUXE", 150, 46, SKYBLUE);
-    DrawCenteredText("C++ / raylib arcade pet project", 210, 22, RAYWHITE);
+    DrawCenteredText("arcade with weapons, enemies and procedural audio", 210, 22, RAYWHITE);
 
     DrawCenteredText("ENTER - start game", 315, 28, GREEN);
-    DrawCenteredText("WASD / ARROWS - move ship", 360, 24, LIGHTGRAY);
-    DrawCenteredText("P - pause", 395, 24, LIGHTGRAY);
-    DrawCenteredText("ESC - menu / exit", 430, 24, LIGHTGRAY);
+    DrawCenteredText("S - settings", 350, 24, SKYBLUE);
+    DrawCenteredText("WASD / ARROWS - move, SPACE / CTRL - shoot", 390, 24, LIGHTGRAY);
+    DrawCenteredText("P - pause, ESC - menu / exit", 430, 24, LIGHTGRAY);
 
     std::ostringstream stream;
-    stream << "High score: " << highScore_;
+    stream << "High score: " << highScore_ << "   Difficulty: " << DifficultyToString(saveData_.difficulty);
     DrawCenteredText(stream.str(), 510, 24, GOLD);
+}
+
+void Game::DrawSettings() const {
+    DrawRectangle(0, 0, cfg::ScreenWidth, cfg::ScreenHeight, Fade(BLACK, 0.35f));
+    DrawCenteredText("SETTINGS", 150, 46, SKYBLUE);
+
+    std::ostringstream difficultyText;
+    difficultyText << "D / RIGHT - difficulty: " << DifficultyToString(saveData_.difficulty);
+    DrawCenteredText(difficultyText.str(), 275, 26, RAYWHITE);
+    DrawCenteredText(saveData_.musicEnabled ? "M - music: on" : "M - music: off", 325, 24, saveData_.musicEnabled ? GREEN : RED);
+    DrawCenteredText(saveData_.soundEnabled ? "N - sounds: on" : "N - sounds: off", 365, 24, saveData_.soundEnabled ? GREEN : RED);
+    DrawCenteredText("ENTER or ESC - back", 455, 24, LIGHTGRAY);
 }
 
 void Game::DrawPlaying() const {
@@ -269,6 +455,10 @@ void Game::DrawPlaying() const {
 
     for (const Asteroid& asteroid : asteroids_) {
         asteroid.Draw();
+    }
+
+    for (const Bullet& bullet : bullets_) {
+        bullet.Draw();
     }
 
     for (const Particle& particle : particles_) {
@@ -298,7 +488,7 @@ void Game::DrawGameOver() const {
     highText << "High score: " << highScore_;
     DrawCenteredText(highText.str(), 350, 28, GOLD);
 
-    DrawCenteredText("R - restart", 430, 28, GREEN);
+    DrawCenteredText("R / ENTER / SPACE - restart", 430, 28, GREEN);
     DrawCenteredText("ESC - menu", 470, 24, LIGHTGRAY);
 }
 
@@ -313,6 +503,8 @@ void Game::DrawHud() const {
     if (player_.HasShield()) {
         DrawText("SHIELD ACTIVE", cfg::ScreenWidth - 215, 24, 22, SKYBLUE);
     }
+
+    DrawText(TextFormat("Difficulty: %s", DifficultyToString(saveData_.difficulty).c_str()), cfg::ScreenWidth - 210, 56, 18, LIGHTGRAY);
 }
 
 void Game::DrawCenteredText(const std::string& text, int y, int fontSize, Color color) const {
@@ -329,3 +521,51 @@ int Game::RandomInt(int minValue, int maxValue) {
     std::uniform_int_distribution<int> distribution(minValue, maxValue);
     return distribution(rng_);
 }
+
+#ifndef UNIT_TEST
+void Game::InitializeAudio() {
+    InitAudioDevice();
+    audioReady_ = IsAudioDeviceReady();
+    if (!audioReady_) {
+        return;
+    }
+
+    shotSound_ = CreateTone(880.0f, 0.08f, 0.28f);
+    pickupSound_ = CreateTone(660.0f, 0.14f, 0.24f);
+    explosionSound_ = CreateTone(120.0f, 0.22f, 0.34f);
+    SetAudioStreamBufferSizeDefault(512);
+    musicStream_ = LoadAudioStream(22050, 16, 1);
+    musicBuffer_.reserve(512);
+}
+
+void Game::ShutdownAudio() {
+    if (!audioReady_) {
+        return;
+    }
+
+    UnloadSound(shotSound_);
+    UnloadSound(pickupSound_);
+    UnloadSound(explosionSound_);
+    UnloadAudioStream(musicStream_);
+    CloseAudioDevice();
+    audioReady_ = false;
+}
+
+void Game::PlayShotSound() {
+    if (audioReady_ && saveData_.soundEnabled) {
+        PlaySound(shotSound_);
+    }
+}
+
+void Game::PlayPickupSound() {
+    if (audioReady_ && saveData_.soundEnabled) {
+        PlaySound(pickupSound_);
+    }
+}
+
+void Game::PlayExplosionSound() {
+    if (audioReady_ && saveData_.soundEnabled) {
+        PlaySound(explosionSound_);
+    }
+}
+#endif

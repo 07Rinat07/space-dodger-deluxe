@@ -16,6 +16,7 @@ void Player::Reset() {
 void Player::Update(float dt) {
     Vector2 direction{0.0f, 0.0f};
 
+#ifndef UNIT_TEST
     if (IsKeyDown(KEY_A) || IsKeyDown(KEY_LEFT)) {
         direction.x -= 1.0f;
     }
@@ -28,6 +29,7 @@ void Player::Update(float dt) {
     if (IsKeyDown(KEY_S) || IsKeyDown(KEY_DOWN)) {
         direction.y += 1.0f;
     }
+#endif
 
     // Normalize diagonal movement so W+D is not faster than only W or only D.
     const float length = std::sqrt(direction.x * direction.x + direction.y * direction.y);
@@ -50,6 +52,7 @@ void Player::Update(float dt) {
 }
 
 void Player::Draw() const {
+#ifndef UNIT_TEST
     // Ship body: triangle pointing upward.
     const Vector2 nose{position_.x, position_.y - radius_ - 10.0f};
     const Vector2 leftWing{position_.x - radius_ - 8.0f, position_.y + radius_};
@@ -74,6 +77,7 @@ void Player::Draw() const {
         DrawCircleLines(static_cast<int>(position_.x), static_cast<int>(position_.y), radius_ + 18.0f, BLUE);
         DrawCircleLines(static_cast<int>(position_.x), static_cast<int>(position_.y), radius_ + 22.0f, Fade(SKYBLUE, 0.7f));
     }
+#endif
 }
 
 Vector2 Player::GetPosition() const {

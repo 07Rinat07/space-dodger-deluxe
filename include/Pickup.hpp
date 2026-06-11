@@ -1,6 +1,6 @@
 #pragma once
 
-#include "raylib.h"
+#include "RaylibCompat.hpp"
 
 // Bonus item type.
 // Score adds points, Shield protects the player from one collision window.

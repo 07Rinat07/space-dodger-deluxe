@@ -15,7 +15,10 @@ namespace cfg {
     constexpr float PickupRadius = 16.0f;
     constexpr float InitialSpawnDelay = 0.75f;
     constexpr float MinSpawnDelay = 0.22f;
+    constexpr float BulletRadius = 5.0f;
+    constexpr float BulletSpeed = 640.0f;
+    constexpr float ShotCooldown = 0.22f;
 
     constexpr const char* WindowTitle = "Space Dodger Deluxe - C++ raylib";
-    constexpr const char* SaveFileName = "space_dodger_save.txt";
+    constexpr const char* SaveFileName = "space_dodger_save.json";
 }

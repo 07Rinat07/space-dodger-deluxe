@@ -1,134 +1,142 @@
 # Space Dodger Deluxe
 
-A small but complete **C++ arcade game pet project** built with **raylib** and **CMake**.
+Небольшая аркадная игра на C++ с использованием **raylib** и **CMake**.
 
-You control a spaceship, dodge asteroids, collect bonus pickups and try to beat your high score.
-The project is intentionally written in a simple educational style so it can be used as a portfolio project and as a learning base for C++ game development.
+Управляйте космическим кораблём, уклоняйтесь от астероидов, собирайте бонусы и побеждайте собственный рекорд.
+Игра использует процедурные визуальные ресурсы, звуки и фоновую музыку, поэтому для запуска не нужны отдельные файлы текстур или аудио.
 
-## Gameplay
+## Управление
 
-- Move the spaceship with `WASD` or arrow keys.
-- Dodge falling asteroids.
-- Collect yellow bonus pickups for extra score.
-- Collect blue shield pickups to survive one dangerous collision window.
-- Press `P` to pause.
-- Press `R` on Game Over to restart.
-- Press `Esc` to return to the menu.
+- `WASD` или стрелки — управление кораблём.
+- Уклоняйтесь от падающих астероидов.
+- Собирайте жёлтые бонусы, чтобы получить дополнительные очки.
+- Собирайте синие щиты, чтобы пережить один удар.
+- `P` — пауза.
+- `Space` или `Ctrl` во время игры — стрелять.
+- `Enter`, `Space` или `R` — начать игру или перезапустить после Game Over.
+- `S` в главном меню — настройки.
+- `Esc` — вернуться в меню или выйти из игры.
 
-## Screenshots
-
-![Space Dodger Deluxe cover](assets/screenshots/cover.png)
-
-After you run the game, add your own gameplay screenshots here:
-
-```text
-assets/screenshots/menu.png
-assets/screenshots/gameplay.png
-assets/screenshots/game-over.png
-```
-
-Example markdown for GitHub:
-
-```md
-![Gameplay](assets/screenshots/gameplay.png)
-```
-
-## Project structure
+## Структура проекта
 
 ```text
 space-dodger-deluxe/
-├── .github/workflows/build.yml   # GitHub Actions build check
-├── assets/                       # Future textures, sounds and screenshots
-├── docs/                         # Learning notes and architecture description
-├── include/                      # Header files
-├── src/                          # C++ source files
-├── CMakeLists.txt                # Build configuration
+├── .github/workflows/            # Проверка сборки и тестов в GitHub Actions
+├── assets/                       # Будущие текстуры, звуки и скриншоты
+├── docs/                         # Архитектура и заметки по проекту
+├── include/                      # Заголовочные файлы
+├── src/                          # Исходники C++
+├── tests/                        # Простые unit-тесты логики
+├── CMakeLists.txt                # Конфигурация CMake
 ├── LICENSE
 └── README.md
 ```
 
-## Requirements
+## Требования
 
-You need:
-
-- C++ compiler with C++17 support
+- Компилятор C++ с поддержкой C++17
 - CMake 3.20+
 - Git
-- Internet connection during the first CMake configure step, because CMake downloads raylib automatically
+- raylib, установленный в системе, или интернет при первом запуске CMake, чтобы CMake автоматически загрузил raylib
 
-Recommended tools on Windows:
+### Рекомендуемые пакеты для Linux
 
-- Visual Studio 2022 with "Desktop development with C++"
-- or MinGW-w64 + CMake
-- or CLion / Visual Studio Code with CMake Tools
+Если в репозитории вашего дистрибутива есть raylib:
 
-## Build and run
+```bash
+sudo apt update
+sudo apt install cmake build-essential git libraylib-dev
+```
 
-### Windows / Linux / macOS
+Если `libraylib-dev` недоступен, установите только базовые инструменты. CMake скачает raylib сам:
+
+```bash
+sudo apt update
+sudo apt install cmake build-essential git
+```
+
+Для сборки raylib на Linux могут понадобиться системные библиотеки OpenGL/X11:
+
+```bash
+sudo apt install libasound2-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev libglu1-mesa-dev libxcursor-dev libxinerama-dev
+```
+
+## Сборка и запуск
+
+### Сборка
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release
 ```
 
-Run the executable:
+### Запуск игры
 
 ```bash
-# Windows, Visual Studio generator
+# Linux / macOS
+./build/space_dodger
+
+# Windows, Visual Studio
 ./build/Release/space_dodger.exe
 
-# Windows, MinGW generator
+# Windows, MinGW
 ./build/space_dodger.exe
-
-# Linux/macOS
-./build/space_dodger
 ```
 
-## Upload to GitHub
-
-Create an empty repository on GitHub, then run:
+### Тесты
 
 ```bash
-git init
-git add .
-git commit -m "Initial Space Dodger Deluxe game"
-git branch -M main
-git remote add origin https://github.com/YOUR_LOGIN/space-dodger-deluxe.git
-git push -u origin main
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build --config Debug --target unit_tests
+ctest --test-dir build --output-on-failure
 ```
 
-Replace `YOUR_LOGIN` with your GitHub username.
+Unit-тесты проверяют математические функции, JSON-сохранение рекорда и настроек, а также headless-логику игровых объектов: игрока, астероидов, пуль, бонусов и частиц. Они не открывают окно и не требуют запуска графического режима.
 
-## What this project demonstrates
+## Стабильность
 
-This project is useful for a junior C++/game-dev portfolio because it demonstrates:
+В проекте уже есть несколько защит от типичных проблем:
 
-- C++ classes and object-oriented structure
-- game loop architecture
-- frame-independent movement with delta time
-- procedural drawing
-- collision detection
-- random spawning
-- pause/menu/game-over states
-- score and high-score saving
-- CMake project setup
-- GitHub Actions build check
+- выход из меню выполняется через флаг завершения игрового цикла, без отрисовки после закрытия окна;
+- рекорд, сложность и переключатели звука/музыки сохраняются в JSON-файл `space_dodger_save.json`;
+- повреждённый или отрицательный рекорд считается нулём;
+- тесты игровой логики запускаются локально и в GitHub Actions.
 
-## Possible improvements
+## Возможности игры
 
-Good next features for learning:
+- Игровой цикл с рендерингом и обновлением объектов.
+- Движение корабля с нормализацией диагонали.
+- Процедурная генерация астероидов и звёздного поля.
+- Бонусы: очки и щит.
+- Оружие и пули.
+- Несколько типов астероидов: обычные, быстрые и тяжёлые.
+- Процедурные звуки выстрела, бонуса и взрыва.
+- Простая процедурная фоновая музыка.
+- Меню настроек со сложностью, звуками и музыкой.
+- Сохранение рекорда и настроек в JSON.
+- Статусы игры: меню, настройки, игра, пауза, Game Over.
 
-1. Add real spaceship and asteroid textures.
-2. Add sound effects and background music.
-3. Add shooting mechanics.
-4. Add health points.
-5. Add different enemy types.
-6. Add difficulty levels.
-7. Add a settings screen.
-8. Save high score in JSON.
-9. Add unit tests for small utility functions.
-10. Build a web version with Emscripten.
+## Web-сборка
 
-## License
+Для web-версии нужен Emscripten. После активации окружения Emscripten:
+
+```bash
+emcmake cmake -S . -B build-web -DCMAKE_BUILD_TYPE=Release
+cmake --build build-web --parallel
+```
+
+Результат будет собран как HTML-приложение.
+
+## План развития
+
+Проект находится в активной разработке. В следующих версиях можно улучшить:
+
+1. Подключить настоящие внешние текстуры и спрайт-листы.
+2. Добавить полноценные музыкальные треки.
+3. Добавить боссов и волны врагов.
+4. Сделать таблицу рекордов.
+5. Добавить Android/iOS-обвязку поверх raylib.
+
+## Лицензия
 
 MIT License.

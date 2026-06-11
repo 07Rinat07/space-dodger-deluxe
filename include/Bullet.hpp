@@ -2,25 +2,19 @@
 
 #include "RaylibCompat.hpp"
 
-class Player {
+class Bullet {
 public:
-    Player();
+    Bullet(Vector2 position, float speed);
 
-    void Reset();
     void Update(float dt);
     void Draw() const;
 
     Vector2 GetPosition() const;
     float GetRadius() const;
-
-    void ActivateShield(float seconds);
-    bool HasShield() const;
+    bool IsOffScreen() const;
 
 private:
     Vector2 position_{};
-    float radius_{};
     float speed_{};
-    float shieldTimeLeft_{};
-
-    void KeepInsideScreen();
+    float radius_{};
 };

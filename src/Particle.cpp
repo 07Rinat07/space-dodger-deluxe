@@ -10,11 +10,21 @@ void Particle::Update(float dt) {
 }
 
 void Particle::Draw() const {
+#ifndef UNIT_TEST
     const float t = life_ / maxLife_;
     const float radius = 2.0f + t * 5.0f;
     DrawCircleV(position_, radius, Fade(color_, t));
+#endif
 }
 
 bool Particle::IsDead() const {
     return life_ <= 0.0f;
+}
+
+Vector2 Particle::GetPosition() const {
+    return position_;
+}
+
+float Particle::GetLife() const {
+    return life_;
 }

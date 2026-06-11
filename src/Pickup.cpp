@@ -11,6 +11,7 @@ void Pickup::Update(float dt) {
 }
 
 void Pickup::Draw() const {
+#ifndef UNIT_TEST
     const float animatedRadius = radius_ + std::sin(pulse_) * 3.0f;
 
     if (type_ == PickupType::Score) {
@@ -22,6 +23,7 @@ void Pickup::Draw() const {
         DrawCircleLines(static_cast<int>(position_.x), static_cast<int>(position_.y), animatedRadius + 3.0f, SKYBLUE);
         DrawText("S", static_cast<int>(position_.x - 7), static_cast<int>(position_.y - 12), 24, RAYWHITE);
     }
+#endif
 }
 
 Vector2 Pickup::GetPosition() const {

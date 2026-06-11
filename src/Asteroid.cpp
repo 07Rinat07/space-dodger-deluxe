@@ -2,8 +2,20 @@
 #include "Config.hpp"
 #include <cmath>
 
-Asteroid::Asteroid(Vector2 position, Vector2 velocity, float radius, float rotationSpeed)
-    : position_(position), velocity_(velocity), radius_(radius), rotation_(0.0f), rotationSpeed_(rotationSpeed) {}
+namespace {
+int InitialHealth(AsteroidType type) {
+    return type == AsteroidType::Heavy ? 2 : 1;
+}
+}
+
+Asteroid::Asteroid(Vector2 position, Vector2 velocity, float radius, float rotationSpeed, AsteroidType type)
+    : position_(position),
+      velocity_(velocity),
+      radius_(radius),
+      rotation_(0.0f),
+      rotationSpeed_(rotationSpeed),
+      type_(type),
+      health_(InitialHealth(type)) {}
 
 void Asteroid::Update(float dt) {
     position_.x += velocity_.x * dt;
@@ -12,6 +24,10 @@ void Asteroid::Update(float dt) {
 }
 
 void Asteroid::Draw() const {
+#ifndef UNIT_TEST
+    const Color fillColor = type_ == AsteroidType::Fast ? MAROON : (type_ == AsteroidType::Heavy ? DARKGRAY : BROWN);
+    const Color lineColor = type_ == AsteroidType::Fast ? RED : (type_ == AsteroidType::Heavy ? GRAY : DARKBROWN);
+
     // A procedural asteroid: several points around a circle.
     constexpr int points = 10;
     Vector2 vertices[points]{};
@@ -26,12 +42,22 @@ void Asteroid::Draw() const {
     }
 
     for (int i = 1; i < points - 1; ++i) {
-        DrawTriangle(vertices[0], vertices[i], vertices[i + 1], BROWN);
+        DrawTriangle(vertices[0], vertices[i], vertices[i + 1], fillColor);
     }
 
     for (int i = 0; i < points; ++i) {
-        DrawLineV(vertices[i], vertices[(i + 1) % points], DARKBROWN);
+        DrawLineV(vertices[i], vertices[(i + 1) % points], lineColor);
     }
+
+    if (type_ == AsteroidType::Heavy) {
+        DrawCircleLines(static_cast<int>(position_.x), static_cast<int>(position_.y), radius_ * 0.55f, RAYWHITE);
+    }
+#endif
+}
+
+bool Asteroid::TakeDamage(int damage) {
+    health_ -= damage;
+    return health_ <= 0;
 }
 
 Vector2 Asteroid::GetPosition() const {
@@ -40,6 +66,26 @@ Vector2 Asteroid::GetPosition() const {
 
 float Asteroid::GetRadius() const {
     return radius_;
+}
+
+AsteroidType Asteroid::GetType() const {
+    return type_;
+}
+
+int Asteroid::GetHealth() const {
+    return health_;
+}
+
+int Asteroid::GetScoreValue() const {
+    switch (type_) {
+        case AsteroidType::Fast:
+            return 80;
+        case AsteroidType::Heavy:
+            return 120;
+        case AsteroidType::Rock:
+        default:
+            return 55;
+    }
 }
 
 bool Asteroid::IsOffScreen() const {

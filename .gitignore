@@ -16,9 +16,13 @@ Makefile
 *.lib
 *.o
 *.obj
+/build_unit_tests
+/unit_tests
+/space_dodger
 
 # User/runtime files
 space_dodger_save.txt
+space_dodger_save.json
 *.log
 
 # IDE files

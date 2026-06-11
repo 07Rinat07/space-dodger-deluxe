@@ -1,13 +1,14 @@
 # Assets
 
-The current version draws all graphics procedurally with raylib shapes.
-This folder is prepared for future sprites, fonts and sounds.
+Текущая версия игры использует встроенные процедурные визуальные эффекты, звуки и фоновую музыку.
+Игра запускается без внешних ассетов, но папка подготовлена для будущих текстур, шрифтов, звуков и музыки.
 
-Suggested future structure:
+Рекомендуемая будущая структура:
 
 ```text
 assets/
 ├── textures/
 ├── sounds/
+├── music/
 └── fonts/
 ```

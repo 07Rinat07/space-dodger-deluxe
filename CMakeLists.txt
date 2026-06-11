@@ -17,26 +17,31 @@ else()
     add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
-include(FetchContent)
+find_package(raylib QUIET)
 
-# raylib is fetched and built automatically, so the user does not need to install it manually.
-# You can update GIT_TAG to a newer stable version later if needed.
-FetchContent_Declare(
-    raylib
-    GIT_REPOSITORY https://github.com/raysan5/raylib.git
-    GIT_TAG 5.5
-    GIT_SHALLOW TRUE
-)
+if (NOT raylib_FOUND)
+    include(FetchContent)
 
-# Keep raylib examples out of the user's build.
-set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-set(BUILD_GAMES OFF CACHE BOOL "" FORCE)
+    # raylib is fetched and built automatically if not available on the system.
+    # You can update GIT_TAG to a newer stable version later if needed.
+    FetchContent_Declare(
+        raylib
+        GIT_REPOSITORY https://github.com/raysan5/raylib.git
+        GIT_TAG 5.5
+        GIT_SHALLOW TRUE
+    )
 
-FetchContent_MakeAvailable(raylib)
+    # Keep raylib examples out of the user's build.
+    set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(BUILD_GAMES OFF CACHE BOOL "" FORCE)
+
+    FetchContent_MakeAvailable(raylib)
+endif()
 
 add_executable(space_dodger
     src/main.cpp
     src/Game.cpp
+    src/Bullet.cpp
     src/Player.cpp
     src/Asteroid.cpp
     src/Pickup.cpp
@@ -47,6 +52,31 @@ add_executable(space_dodger
 
 target_include_directories(space_dodger PRIVATE include)
 target_link_libraries(space_dodger PRIVATE raylib)
+
+if (EMSCRIPTEN)
+    set_target_properties(space_dodger PROPERTIES SUFFIX ".html")
+    target_link_options(space_dodger PRIVATE
+        "SHELL:-s USE_GLFW=3"
+        "SHELL:-s ASYNCIFY"
+        "SHELL:-s ALLOW_MEMORY_GROWTH=1"
+    )
+endif()
+
+enable_testing()
+
+add_executable(unit_tests
+    tests/UnitTests.cpp
+    src/Asteroid.cpp
+    src/Bullet.cpp
+    src/Pickup.cpp
+    src/Particle.cpp
+    src/Player.cpp
+    src/Storage.cpp
+)
+
+target_compile_definitions(unit_tests PRIVATE UNIT_TEST=1)
+target_include_directories(unit_tests PRIVATE include)
+add_test(NAME unit_tests COMMAND unit_tests)
 
 # On some Linux systems raylib examples use libm explicitly.
 if (UNIX AND NOT APPLE)
