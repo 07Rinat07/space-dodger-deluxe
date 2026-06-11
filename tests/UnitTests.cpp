@@ -83,7 +83,7 @@ void TestStorageJsonSettingsRoundTrip() {
     expected.difficulty = DifficultyLevel::Hard;
     expected.soundEnabled = false;
     expected.musicEnabled = true;
-    expected.leaderboard = {777, 450, 120};
+    expected.leaderboard = {{"ACE", 777}, {"BOB", 450}, {"CAT", 120}};
 
     Storage::Save(expected, tempPath.string());
     const SaveData actual = Storage::Load(tempPath.string());
@@ -93,9 +93,12 @@ void TestStorageJsonSettingsRoundTrip() {
     ASSERT_TRUE(!actual.soundEnabled);
     ASSERT_TRUE(actual.musicEnabled);
     ASSERT_EQ(actual.leaderboard.size(), static_cast<std::size_t>(3));
-    ASSERT_EQ(actual.leaderboard[0], 777);
-    ASSERT_EQ(actual.leaderboard[1], 450);
-    ASSERT_EQ(actual.leaderboard[2], 120);
+    ASSERT_EQ(actual.leaderboard[0].name, std::string("ACE"));
+    ASSERT_EQ(actual.leaderboard[0].score, 777);
+    ASSERT_EQ(actual.leaderboard[1].name, std::string("BOB"));
+    ASSERT_EQ(actual.leaderboard[1].score, 450);
+    ASSERT_EQ(actual.leaderboard[2].name, std::string("CAT"));
+    ASSERT_EQ(actual.leaderboard[2].score, 120);
 
     std::filesystem::remove(tempPath);
 }
@@ -147,16 +150,19 @@ void TestDifficultyHelpers() {
 }
 
 void TestLeaderboardKeepsBestScores() {
-    std::vector<int> leaderboard = {100, 400, 50};
-    leaderboard = AddScoreToLeaderboard(leaderboard, 250, 3);
+    std::vector<ScoreEntry> leaderboard = {{"ONE", 100}, {"TWO", 400}, {"THREE", 50}};
+    leaderboard = AddScoreToLeaderboard(leaderboard, "new player!", 250, 3);
 
     ASSERT_EQ(leaderboard.size(), static_cast<std::size_t>(3));
-    ASSERT_EQ(leaderboard[0], 400);
-    ASSERT_EQ(leaderboard[1], 250);
-    ASSERT_EQ(leaderboard[2], 100);
+    ASSERT_EQ(leaderboard[0].score, 400);
+    ASSERT_EQ(leaderboard[1].name, std::string("NEWPLAYER"));
+    ASSERT_EQ(leaderboard[1].score, 250);
+    ASSERT_EQ(leaderboard[2].score, 100);
 
-    leaderboard = AddScoreToLeaderboard(leaderboard, -20, 3);
+    leaderboard = AddScoreToLeaderboard(leaderboard, "bad", -20, 3);
     ASSERT_EQ(leaderboard.size(), static_cast<std::size_t>(3));
+    ASSERT_EQ(SanitizePlayerName(""), std::string("PLAYER"));
+    ASSERT_EQ(SanitizePlayerName("a_b-12!"), std::string("A_B-12"));
 }
 
 void TestWaveSystem() {
@@ -196,7 +202,8 @@ void TestAsteroidMovementAndBounds() {
 void TestAsteroidTypesAndDamage() {
     Asteroid fast({0.0f, 0.0f}, {0.0f, 0.0f}, 16.0f, 0.0f, AsteroidType::Fast);
     Asteroid heavy({0.0f, 0.0f}, {0.0f, 0.0f}, 32.0f, 0.0f, AsteroidType::Heavy);
-    Asteroid boss({0.0f, 0.0f}, {0.0f, 0.0f}, 74.0f, 0.0f, AsteroidType::Boss);
+    Asteroid boss({0.0f, 0.0f}, {0.0f, 0.0f}, 74.0f, 0.0f, AsteroidType::BossCruiser);
+    Asteroid carrier({0.0f, 0.0f}, {0.0f, 0.0f}, 86.0f, 0.0f, AsteroidType::BossCarrier);
 
     ASSERT_TRUE(fast.GetType() == AsteroidType::Fast);
     ASSERT_EQ(fast.GetHealth(), 1);
@@ -209,9 +216,10 @@ void TestAsteroidTypesAndDamage() {
     ASSERT_EQ(heavy.GetHealth(), 1);
     ASSERT_TRUE(heavy.TakeDamage(1));
 
-    ASSERT_TRUE(boss.GetType() == AsteroidType::Boss);
+    ASSERT_TRUE(boss.GetType() == AsteroidType::BossCruiser);
     ASSERT_TRUE(boss.GetHealth() > heavy.GetHealth());
     ASSERT_TRUE(boss.GetScoreValue() > heavy.GetScoreValue());
+    ASSERT_TRUE(carrier.GetHealth() > boss.GetHealth());
 }
 
 void TestBulletMovementAndBounds() {

@@ -1,0 +1,31 @@
+plugins {
+    id "com.android.application"
+}
+
+android {
+    namespace "com.spacedodger.deluxe"
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "com.spacedodger.deluxe"
+        minSdk 24
+        targetSdk 35
+        versionCode 1
+        versionName "1.0"
+
+        externalNativeBuild {
+            cmake {
+                cppFlags "-std=c++17"
+                arguments "-DANDROID_STL=c++_static",
+                    "-DRAYLIB_ANDROID_SOURCE=${project.findProperty("RAYLIB_ANDROID_SOURCE") ?: ""}"
+            }
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path "src/main/cpp/CMakeLists.txt"
+            version "3.22.1"
+        }
+    }
+}

@@ -6,7 +6,9 @@ enum class AsteroidType {
     Rock,
     Fast,
     Heavy,
-    Boss
+    BossCruiser,
+    BossStriker,
+    BossCarrier
 };
 
 class Asteroid {

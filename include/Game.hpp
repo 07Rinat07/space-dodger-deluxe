@@ -8,6 +8,7 @@
 #include "Starfield.hpp"
 #include "Storage.hpp"
 #include "WaveSystem.hpp"
+#include <array>
 #include <random>
 #include <string>
 #include <vector>
@@ -17,7 +18,16 @@ enum class GameState {
     Playing,
     Paused,
     GameOver,
+    NameEntry,
     Settings
+};
+
+enum class MusicTrack {
+    Menu,
+    Game,
+    Boss,
+    GameOver,
+    Count
 };
 
 class Game {
@@ -49,22 +59,33 @@ private:
     float pickupSpawnTimer_ = 0.0f;
     float difficulty_ = 1.0f;
     float shotCooldown_ = 0.0f;
+    float bossAttackTimer_ = 0.0f;
     int currentWave_ = 1;
     int bossWaveSpawned_ = 0;
     bool exitRequested_ = false;
+    bool scoreSubmitted_ = true;
+    std::string playerName_ = "PLAYER";
 
 #ifndef UNIT_TEST
-    bool spritesheetReady_ = false;
-    Texture2D spritesheet_{};
+    bool artReady_ = false;
+    Texture2D playerTexture_{};
+    Texture2D asteroidRockTexture_{};
+    Texture2D asteroidFastTexture_{};
+    Texture2D asteroidHeavyTexture_{};
+    Texture2D bulletTexture_{};
+    Texture2D pickupScoreTexture_{};
+    Texture2D pickupShieldTexture_{};
+    Texture2D bossCruiserTexture_{};
     bool audioReady_ = false;
     bool externalShotReady_ = false;
     bool externalPickupReady_ = false;
     bool externalExplosionReady_ = false;
-    bool externalMusicReady_ = false;
+    std::array<bool, static_cast<std::size_t>(MusicTrack::Count)> externalMusicReady_{};
     Sound shotSound_{};
     Sound pickupSound_{};
     Sound explosionSound_{};
-    Music backgroundMusic_{};
+    std::array<Music, static_cast<std::size_t>(MusicTrack::Count)> musicTracks_{};
+    MusicTrack currentMusicTrack_ = MusicTrack::Menu;
     AudioStream musicStream_{};
     float musicPhase_ = 0.0f;
     std::vector<short> musicBuffer_;
@@ -80,10 +101,12 @@ private:
 
     void SpawnAsteroid();
     void SpawnBoss();
+    void UpdateBossPatterns(float dt);
     void SpawnPickup();
     void FireBullet();
     void SpawnExplosion(Vector2 position, Color color, int count);
     void SaveSettings();
+    void SubmitScore();
 
     void UpdatePlaying(float dt);
     void UpdateParticles(float dt);
@@ -96,6 +119,7 @@ private:
     void DrawPlaying() const;
     void DrawPaused() const;
     void DrawGameOver() const;
+    void DrawNameEntry() const;
     void DrawHud() const;
     void DrawCenteredText(const std::string& text, int y, int fontSize, Color color) const;
 
@@ -105,10 +129,13 @@ private:
 #ifndef UNIT_TEST
     void InitializeAssets();
     void ShutdownAssets();
-    void DrawSpriteCell(int cellX, int cellY, Vector2 center, float size, float rotation = 0.0f) const;
+    bool LoadTextureIfExists(Texture2D& texture, const char* path);
+    void DrawTextureAsset(const Texture2D& texture, Vector2 center, float size, float rotation = 0.0f) const;
     bool HasLivingBoss() const;
     void InitializeAudio();
     void ShutdownAudio();
+    void LoadMusicTrack(MusicTrack track, const char* path);
+    MusicTrack TargetMusicTrack() const;
     void PlayShotSound();
     void PlayPickupSound();
     void PlayExplosionSound();

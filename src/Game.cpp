@@ -88,6 +88,23 @@ void Game::HandleInput() {
         state_ = GameState::Settings;
     }
 
+    if (state_ == GameState::NameEntry) {
+        int key = GetCharPressed();
+        while (key > 0) {
+            if (playerName_.size() < 12 && ((key >= '0' && key <= '9') || (key >= 'A' && key <= 'Z') || (key >= 'a' && key <= 'z') || key == '_' || key == '-')) {
+                playerName_.push_back(static_cast<char>(key));
+            }
+            key = GetCharPressed();
+        }
+
+        if (IsKeyPressed(KEY_BACKSPACE) && !playerName_.empty()) {
+            playerName_.pop_back();
+        }
+        if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER)) {
+            SubmitScore();
+        }
+    }
+
     if (state_ == GameState::Settings) {
         if (IsKeyPressed(KEY_D) || IsKeyPressed(KEY_RIGHT)) {
             saveData_.difficulty = NextDifficulty(saveData_.difficulty);
@@ -121,6 +138,8 @@ void Game::HandleInput() {
     if (IsKeyPressed(KEY_ESCAPE)) {
         if (state_ == GameState::Menu) {
             exitRequested_ = true;
+        } else if (state_ == GameState::NameEntry) {
+            SubmitScore();
         } else {
             state_ = GameState::Menu;
         }
@@ -160,6 +179,10 @@ void Game::Draw() const {
             DrawPlaying();
             DrawGameOver();
             break;
+        case GameState::NameEntry:
+            DrawPlaying();
+            DrawNameEntry();
+            break;
         case GameState::Settings:
             DrawSettings();
             break;
@@ -182,8 +205,10 @@ void Game::StartNewGame() {
     asteroidSpawnTimer_ = 0.0f;
     pickupSpawnTimer_ = 3.0f;
     shotCooldown_ = 0.0f;
+    bossAttackTimer_ = 1.8f;
     currentWave_ = 1;
     bossWaveSpawned_ = 0;
+    scoreSubmitted_ = true;
 }
 
 void Game::TogglePause() {
@@ -195,15 +220,15 @@ void Game::TogglePause() {
 }
 
 void Game::FinishGame() {
-    state_ = GameState::GameOver;
+    state_ = GameState::NameEntry;
     SpawnExplosion(player_.GetPosition(), RED, 42);
 
     if (score_ > highScore_) {
         highScore_ = score_;
     }
     saveData_.highScore = highScore_;
-    saveData_.leaderboard = AddScoreToLeaderboard(saveData_.leaderboard, score_);
-    Storage::Save(saveData_);
+    scoreSubmitted_ = false;
+    playerName_ = SanitizePlayerName(saveData_.leaderboard.empty() ? "PLAYER" : saveData_.leaderboard.front().name);
 #ifndef UNIT_TEST
     PlayExplosionSound();
 #endif
@@ -226,13 +251,48 @@ void Game::SpawnAsteroid() {
 }
 
 void Game::SpawnBoss() {
-    const float radius = 74.0f;
+    const int bossSelector = (currentWave_ / 3) % 3;
+    const AsteroidType bossType = bossSelector == 1 ? AsteroidType::BossStriker : (bossSelector == 2 ? AsteroidType::BossCarrier : AsteroidType::BossCruiser);
+    const float radius = bossType == AsteroidType::BossStriker ? 62.0f : (bossType == AsteroidType::BossCarrier ? 86.0f : 74.0f);
     const float x = RandomFloat(radius + 20.0f, cfg::ScreenWidth - radius - 20.0f);
     const float y = -radius;
-    const float horizontalDrift = RandomFloat(-90.0f, 90.0f);
-    const float verticalSpeed = (80.0f + currentWave_ * 4.0f) * DifficultySpeedMultiplier(saveData_.difficulty);
+    const float horizontalDrift = bossType == AsteroidType::BossStriker ? RandomFloat(-135.0f, 135.0f) : RandomFloat(-90.0f, 90.0f);
+    const float verticalSpeed = (bossType == AsteroidType::BossCarrier ? 62.0f : 80.0f + currentWave_ * 4.0f) * DifficultySpeedMultiplier(saveData_.difficulty);
 
-    asteroids_.emplace_back(Vector2{x, y}, Vector2{horizontalDrift, verticalSpeed}, radius, 0.45f, AsteroidType::Boss);
+    asteroids_.emplace_back(Vector2{x, y}, Vector2{horizontalDrift, verticalSpeed}, radius, 0.45f, bossType);
+    bossAttackTimer_ = 1.2f;
+}
+
+void Game::UpdateBossPatterns(float dt) {
+    bossAttackTimer_ -= dt;
+    if (bossAttackTimer_ > 0.0f) {
+        return;
+    }
+
+    std::vector<Asteroid> spawned;
+    for (const Asteroid& asteroid : asteroids_) {
+        const AsteroidType type = asteroid.GetType();
+        if (type != AsteroidType::BossCruiser && type != AsteroidType::BossStriker && type != AsteroidType::BossCarrier) {
+            continue;
+        }
+
+        const Vector2 origin = asteroid.GetPosition();
+        if (type == AsteroidType::BossStriker) {
+            spawned.emplace_back(Vector2{origin.x - 34.0f, origin.y + 45.0f}, Vector2{-110.0f, 260.0f}, 18.0f, 2.2f, AsteroidType::Fast);
+            spawned.emplace_back(Vector2{origin.x + 34.0f, origin.y + 45.0f}, Vector2{110.0f, 260.0f}, 18.0f, -2.2f, AsteroidType::Fast);
+            bossAttackTimer_ = 1.0f;
+        } else if (type == AsteroidType::BossCarrier) {
+            spawned.emplace_back(Vector2{origin.x - 46.0f, origin.y + 60.0f}, Vector2{-55.0f, 190.0f}, 24.0f, 1.0f, AsteroidType::Rock);
+            spawned.emplace_back(Vector2{origin.x + 46.0f, origin.y + 60.0f}, Vector2{55.0f, 190.0f}, 24.0f, -1.0f, AsteroidType::Rock);
+            spawned.emplace_back(Vector2{origin.x, origin.y + 72.0f}, Vector2{0.0f, 180.0f}, 30.0f, 0.6f, AsteroidType::Heavy);
+            bossAttackTimer_ = 1.7f;
+        } else {
+            spawned.emplace_back(Vector2{origin.x, origin.y + 56.0f}, Vector2{0.0f, 240.0f}, 26.0f, 1.8f, AsteroidType::Heavy);
+            bossAttackTimer_ = 1.35f;
+        }
+    }
+
+    asteroids_.insert(asteroids_.end(), spawned.begin(), spawned.end());
 }
 
 void Game::SpawnPickup() {
@@ -272,6 +332,16 @@ void Game::SaveSettings() {
     Storage::Save(saveData_);
 }
 
+void Game::SubmitScore() {
+    if (!scoreSubmitted_) {
+        saveData_.highScore = highScore_;
+        saveData_.leaderboard = AddScoreToLeaderboard(saveData_.leaderboard, playerName_, score_);
+        Storage::Save(saveData_);
+        scoreSubmitted_ = true;
+    }
+    state_ = GameState::GameOver;
+}
+
 void Game::UpdatePlaying(float dt) {
     survivedTime_ += dt;
     const WaveInfo wave = ComputeWaveInfo(survivedTime_);
@@ -290,6 +360,7 @@ void Game::UpdatePlaying(float dt) {
         SpawnBoss();
         bossWaveSpawned_ = wave.number;
     }
+    UpdateBossPatterns(dt);
 
     asteroidSpawnTimer_ -= dt;
     if (asteroidSpawnTimer_ <= 0.0f) {
@@ -341,8 +412,10 @@ void Game::UpdateMusic() {
     }
 
     if (!saveData_.musicEnabled) {
-        if (externalMusicReady_ && IsMusicStreamPlaying(backgroundMusic_)) {
-            StopMusicStream(backgroundMusic_);
+        for (std::size_t i = 0; i < musicTracks_.size(); ++i) {
+            if (externalMusicReady_[i] && IsMusicStreamPlaying(musicTracks_[i])) {
+                StopMusicStream(musicTracks_[i]);
+            }
         }
         if (IsAudioStreamPlaying(musicStream_)) {
             StopAudioStream(musicStream_);
@@ -350,11 +423,20 @@ void Game::UpdateMusic() {
         return;
     }
 
-    if (externalMusicReady_) {
-        if (!IsMusicStreamPlaying(backgroundMusic_)) {
-            PlayMusicStream(backgroundMusic_);
+    const MusicTrack targetTrack = TargetMusicTrack();
+    const std::size_t targetIndex = static_cast<std::size_t>(targetTrack);
+    if (externalMusicReady_[targetIndex]) {
+        if (currentMusicTrack_ != targetTrack) {
+            const std::size_t currentIndex = static_cast<std::size_t>(currentMusicTrack_);
+            if (externalMusicReady_[currentIndex] && IsMusicStreamPlaying(musicTracks_[currentIndex])) {
+                StopMusicStream(musicTracks_[currentIndex]);
+            }
+            currentMusicTrack_ = targetTrack;
         }
-        UpdateMusicStream(backgroundMusic_);
+        if (!IsMusicStreamPlaying(musicTracks_[targetIndex])) {
+            PlayMusicStream(musicTracks_[targetIndex]);
+        }
+        UpdateMusicStream(musicTracks_[targetIndex]);
         return;
     }
 
@@ -496,36 +578,32 @@ void Game::DrawSettings() const {
 
 void Game::DrawPlaying() const {
     for (const Pickup& pickup : pickups_) {
-        if (spritesheetReady_) {
-            const int cellY = pickup.GetType() == PickupType::Score ? 1 : 1;
-            const int cellX = pickup.GetType() == PickupType::Score ? 0 : 1;
-            DrawSpriteCell(cellX, cellY, pickup.GetPosition(), pickup.GetRadius() * 3.0f);
+        if (artReady_) {
+            DrawTextureAsset(pickup.GetType() == PickupType::Score ? pickupScoreTexture_ : pickupShieldTexture_, pickup.GetPosition(), pickup.GetRadius() * 3.0f);
         } else {
             pickup.Draw();
         }
     }
 
     for (const Asteroid& asteroid : asteroids_) {
-        if (spritesheetReady_) {
-            int cellX = 1;
-            int cellY = 0;
+        if (artReady_) {
+            const Texture2D* texture = &asteroidRockTexture_;
             if (asteroid.GetType() == AsteroidType::Fast) {
-                cellX = 2;
+                texture = &asteroidFastTexture_;
             } else if (asteroid.GetType() == AsteroidType::Heavy) {
-                cellX = 3;
-            } else if (asteroid.GetType() == AsteroidType::Boss) {
-                cellX = 3;
-                cellY = 1;
+                texture = &asteroidHeavyTexture_;
+            } else if (asteroid.GetType() == AsteroidType::BossCruiser || asteroid.GetType() == AsteroidType::BossStriker || asteroid.GetType() == AsteroidType::BossCarrier) {
+                texture = &bossCruiserTexture_;
             }
-            DrawSpriteCell(cellX, cellY, asteroid.GetPosition(), asteroid.GetRadius() * 2.25f);
+            DrawTextureAsset(*texture, asteroid.GetPosition(), asteroid.GetRadius() * 2.25f);
         } else {
             asteroid.Draw();
         }
     }
 
     for (const Bullet& bullet : bullets_) {
-        if (spritesheetReady_) {
-            DrawSpriteCell(2, 1, bullet.GetPosition(), bullet.GetRadius() * 4.0f);
+        if (artReady_) {
+            DrawTextureAsset(bulletTexture_, bullet.GetPosition(), bullet.GetRadius() * 4.0f);
         } else {
             bullet.Draw();
         }
@@ -535,8 +613,8 @@ void Game::DrawPlaying() const {
         particle.Draw();
     }
 
-    if (spritesheetReady_) {
-        DrawSpriteCell(0, 0, player_.GetPosition(), player_.GetRadius() * 3.2f);
+    if (artReady_) {
+        DrawTextureAsset(playerTexture_, player_.GetPosition(), player_.GetRadius() * 3.2f);
         if (player_.HasShield()) {
             DrawCircleLines(static_cast<int>(player_.GetPosition().x), static_cast<int>(player_.GetPosition().y), player_.GetRadius() + 22.0f, SKYBLUE);
         }
@@ -570,13 +648,28 @@ void Game::DrawGameOver() const {
     y += 30;
     for (std::size_t i = 0; i < saveData_.leaderboard.size() && i < 5; ++i) {
         std::ostringstream row;
-        row << i + 1 << ". " << saveData_.leaderboard[i];
+        row << i + 1 << ". " << saveData_.leaderboard[i].name << "  " << saveData_.leaderboard[i].score;
         DrawCenteredText(row.str(), y, 20, LIGHTGRAY);
         y += 24;
     }
 
     DrawCenteredText("R / ENTER / SPACE - restart", 575, 26, GREEN);
     DrawCenteredText("ESC - menu", 615, 22, LIGHTGRAY);
+}
+
+void Game::DrawNameEntry() const {
+    DrawRectangle(0, 0, cfg::ScreenWidth, cfg::ScreenHeight, Fade(BLACK, 0.68f));
+    DrawCenteredText("NEW SCORE", 190, 46, GOLD);
+
+    std::ostringstream scoreText;
+    scoreText << "Score: " << score_;
+    DrawCenteredText(scoreText.str(), 265, 30, RAYWHITE);
+
+    std::ostringstream nameText;
+    nameText << "Name: " << (playerName_.empty() ? "_" : playerName_);
+    DrawCenteredText(nameText.str(), 340, 30, SKYBLUE);
+    DrawCenteredText("Type letters or numbers, BACKSPACE edits", 410, 22, LIGHTGRAY);
+    DrawCenteredText("ENTER saves score", 445, 24, GREEN);
 }
 
 void Game::DrawHud() const {
@@ -612,44 +705,53 @@ int Game::RandomInt(int minValue, int maxValue) {
 
 #ifndef UNIT_TEST
 void Game::InitializeAssets() {
-    if (FileExists("assets/textures/spritesheet.png")) {
-        spritesheet_ = LoadTexture("assets/textures/spritesheet.png");
-        spritesheetReady_ = spritesheet_.id != 0;
-    }
+    const bool playerLoaded = LoadTextureIfExists(playerTexture_, "assets/textures/sprites/player_ship.png");
+    const bool rockLoaded = LoadTextureIfExists(asteroidRockTexture_, "assets/textures/sprites/asteroid_rock.png");
+    const bool fastLoaded = LoadTextureIfExists(asteroidFastTexture_, "assets/textures/sprites/asteroid_fast.png");
+    const bool heavyLoaded = LoadTextureIfExists(asteroidHeavyTexture_, "assets/textures/sprites/asteroid_heavy.png");
+    const bool bulletLoaded = LoadTextureIfExists(bulletTexture_, "assets/textures/sprites/bullet.png");
+    const bool scoreLoaded = LoadTextureIfExists(pickupScoreTexture_, "assets/textures/sprites/pickup_score.png");
+    const bool shieldLoaded = LoadTextureIfExists(pickupShieldTexture_, "assets/textures/sprites/pickup_shield.png");
+    const bool bossLoaded = LoadTextureIfExists(bossCruiserTexture_, "assets/textures/sprites/boss_cruiser.png");
+    artReady_ = playerLoaded && rockLoaded && fastLoaded && heavyLoaded && bulletLoaded && scoreLoaded && shieldLoaded && bossLoaded;
 }
 
 void Game::ShutdownAssets() {
-    if (spritesheetReady_) {
-        UnloadTexture(spritesheet_);
-        spritesheetReady_ = false;
-    }
+    if (playerTexture_.id != 0) UnloadTexture(playerTexture_);
+    if (asteroidRockTexture_.id != 0) UnloadTexture(asteroidRockTexture_);
+    if (asteroidFastTexture_.id != 0) UnloadTexture(asteroidFastTexture_);
+    if (asteroidHeavyTexture_.id != 0) UnloadTexture(asteroidHeavyTexture_);
+    if (bulletTexture_.id != 0) UnloadTexture(bulletTexture_);
+    if (pickupScoreTexture_.id != 0) UnloadTexture(pickupScoreTexture_);
+    if (pickupShieldTexture_.id != 0) UnloadTexture(pickupShieldTexture_);
+    if (bossCruiserTexture_.id != 0) UnloadTexture(bossCruiserTexture_);
+    artReady_ = false;
 }
 
-void Game::DrawSpriteCell(int cellX, int cellY, Vector2 center, float size, float rotation) const {
-    if (!spritesheetReady_) {
-        return;
+bool Game::LoadTextureIfExists(Texture2D& texture, const char* path) {
+    if (!FileExists(path)) {
+        return false;
     }
+    texture = LoadTexture(path);
+    return texture.id != 0;
+}
 
-    const float cellWidth = static_cast<float>(spritesheet_.width) / 4.0f;
-    const float cellHeight = static_cast<float>(spritesheet_.height) / 2.0f;
-    const Rectangle source{
-        static_cast<float>(cellX) * cellWidth,
-        static_cast<float>(cellY) * cellHeight,
-        cellWidth,
-        cellHeight
-    };
+void Game::DrawTextureAsset(const Texture2D& texture, Vector2 center, float size, float rotation) const {
+    const Rectangle source{0.0f, 0.0f, static_cast<float>(texture.width), static_cast<float>(texture.height)};
     const Rectangle destination{
         center.x,
         center.y,
         size,
         size
     };
-    DrawTexturePro(spritesheet_, source, destination, {size / 2.0f, size / 2.0f}, rotation, WHITE);
+    DrawTexturePro(texture, source, destination, {size / 2.0f, size / 2.0f}, rotation, WHITE);
 }
 
 bool Game::HasLivingBoss() const {
     return std::any_of(asteroids_.begin(), asteroids_.end(), [](const Asteroid& asteroid) {
-        return asteroid.GetType() == AsteroidType::Boss;
+        return asteroid.GetType() == AsteroidType::BossCruiser ||
+               asteroid.GetType() == AsteroidType::BossStriker ||
+               asteroid.GetType() == AsteroidType::BossCarrier;
     });
 }
 
@@ -684,10 +786,10 @@ void Game::InitializeAudio() {
         explosionSound_ = CreateTone(120.0f, 0.22f, 0.34f);
     }
 
-    if (FileExists("assets/music/theme.wav")) {
-        backgroundMusic_ = LoadMusicStream("assets/music/theme.wav");
-        externalMusicReady_ = backgroundMusic_.stream.buffer != nullptr;
-    }
+    LoadMusicTrack(MusicTrack::Menu, "assets/music/menu_theme.wav");
+    LoadMusicTrack(MusicTrack::Game, "assets/music/game_theme.wav");
+    LoadMusicTrack(MusicTrack::Boss, "assets/music/boss_theme.wav");
+    LoadMusicTrack(MusicTrack::GameOver, "assets/music/gameover_theme.wav");
 
     SetAudioStreamBufferSizeDefault(512);
     musicStream_ = LoadAudioStream(22050, 16, 1);
@@ -702,12 +804,37 @@ void Game::ShutdownAudio() {
     UnloadSound(shotSound_);
     UnloadSound(pickupSound_);
     UnloadSound(explosionSound_);
-    if (externalMusicReady_) {
-        UnloadMusicStream(backgroundMusic_);
+    for (std::size_t i = 0; i < musicTracks_.size(); ++i) {
+        if (externalMusicReady_[i]) {
+            UnloadMusicStream(musicTracks_[i]);
+        }
     }
     UnloadAudioStream(musicStream_);
     CloseAudioDevice();
     audioReady_ = false;
+}
+
+void Game::LoadMusicTrack(MusicTrack track, const char* path) {
+    const std::size_t index = static_cast<std::size_t>(track);
+    if (!FileExists(path)) {
+        return;
+    }
+
+    musicTracks_[index] = LoadMusicStream(path);
+    externalMusicReady_[index] = musicTracks_[index].stream.buffer != nullptr;
+}
+
+MusicTrack Game::TargetMusicTrack() const {
+    if (state_ == GameState::GameOver || state_ == GameState::NameEntry) {
+        return MusicTrack::GameOver;
+    }
+    if (state_ == GameState::Playing && HasLivingBoss()) {
+        return MusicTrack::Boss;
+    }
+    if (state_ == GameState::Playing || state_ == GameState::Paused) {
+        return MusicTrack::Game;
+    }
+    return MusicTrack::Menu;
 }
 
 void Game::PlayShotSound() {

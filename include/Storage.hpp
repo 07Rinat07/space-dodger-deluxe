@@ -10,12 +10,17 @@ enum class DifficultyLevel {
     Hard
 };
 
+struct ScoreEntry {
+    std::string name = "PLAYER";
+    int score = 0;
+};
+
 struct SaveData {
     int highScore = 0;
     DifficultyLevel difficulty = DifficultyLevel::Normal;
     bool soundEnabled = true;
     bool musicEnabled = true;
-    std::vector<int> leaderboard;
+    std::vector<ScoreEntry> leaderboard;
 };
 
 class Storage {
@@ -32,4 +37,5 @@ DifficultyLevel NextDifficulty(DifficultyLevel difficulty);
 float DifficultySpawnMultiplier(DifficultyLevel difficulty);
 float DifficultySpeedMultiplier(DifficultyLevel difficulty);
 int DifficultyScoreMultiplier(DifficultyLevel difficulty);
-std::vector<int> AddScoreToLeaderboard(std::vector<int> leaderboard, int score, std::size_t limit = 5);
+std::string SanitizePlayerName(const std::string& name);
+std::vector<ScoreEntry> AddScoreToLeaderboard(std::vector<ScoreEntry> leaderboard, const std::string& name, int score, std::size_t limit = 5);

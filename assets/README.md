@@ -8,12 +8,23 @@
 ```text
 assets/
 ├── textures/
-│   └── spritesheet.png
+│   └── sprites/
+│       ├── player_ship.png
+│       ├── asteroid_rock.png
+│       ├── asteroid_fast.png
+│       ├── asteroid_heavy.png
+│       ├── pickup_score.png
+│       ├── pickup_shield.png
+│       ├── bullet.png
+│       └── boss_cruiser.png
 ├── sounds/
 │   ├── shot.wav
 │   ├── pickup.wav
 │   └── explosion.wav
 ├── music/
-│   └── theme.wav
+│   ├── menu_theme.wav
+│   ├── game_theme.wav
+│   ├── boss_theme.wav
+│   └── gameover_theme.wav
 └── fonts/
 ```

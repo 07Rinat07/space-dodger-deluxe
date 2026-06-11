@@ -4,8 +4,14 @@
 
 namespace {
 int InitialHealth(AsteroidType type) {
-    if (type == AsteroidType::Boss) {
+    if (type == AsteroidType::BossCruiser) {
         return 14;
+    }
+    if (type == AsteroidType::BossStriker) {
+        return 10;
+    }
+    if (type == AsteroidType::BossCarrier) {
+        return 18;
     }
     return type == AsteroidType::Heavy ? 2 : 1;
 }
@@ -28,8 +34,9 @@ void Asteroid::Update(float dt) {
 
 void Asteroid::Draw() const {
 #ifndef UNIT_TEST
-    const Color fillColor = type_ == AsteroidType::Fast ? MAROON : (type_ == AsteroidType::Heavy ? DARKGRAY : (type_ == AsteroidType::Boss ? PURPLE : BROWN));
-    const Color lineColor = type_ == AsteroidType::Fast ? RED : (type_ == AsteroidType::Heavy ? GRAY : (type_ == AsteroidType::Boss ? VIOLET : DARKBROWN));
+    const bool boss = type_ == AsteroidType::BossCruiser || type_ == AsteroidType::BossStriker || type_ == AsteroidType::BossCarrier;
+    const Color fillColor = type_ == AsteroidType::Fast ? MAROON : (type_ == AsteroidType::Heavy ? DARKGRAY : (boss ? PURPLE : BROWN));
+    const Color lineColor = type_ == AsteroidType::Fast ? RED : (type_ == AsteroidType::Heavy ? GRAY : (boss ? VIOLET : DARKBROWN));
 
     // A procedural asteroid: several points around a circle.
     constexpr int points = 10;
@@ -52,7 +59,7 @@ void Asteroid::Draw() const {
         DrawLineV(vertices[i], vertices[(i + 1) % points], lineColor);
     }
 
-    if (type_ == AsteroidType::Heavy || type_ == AsteroidType::Boss) {
+    if (type_ == AsteroidType::Heavy || boss) {
         DrawCircleLines(static_cast<int>(position_.x), static_cast<int>(position_.y), radius_ * 0.55f, RAYWHITE);
     }
 #endif
@@ -85,8 +92,12 @@ int Asteroid::GetScoreValue() const {
             return 80;
         case AsteroidType::Heavy:
             return 120;
-        case AsteroidType::Boss:
+        case AsteroidType::BossCruiser:
             return 900;
+        case AsteroidType::BossStriker:
+            return 760;
+        case AsteroidType::BossCarrier:
+            return 1100;
         case AsteroidType::Rock:
         default:
             return 55;

@@ -1,20 +1,18 @@
 # iOS wrapper
 
-Здесь описана минимальная обвязка для iOS-порта поверх raylib.
+Здесь лежит стартовый iOS CMake/Xcode-проект для порта поверх raylib.
 
-## Подход
+## Содержимое
 
-1. Собрать raylib для iOS через Xcode toolchain.
-2. Подключить текущие `src/` и `include/` в Xcode-проект.
-3. Добавить iOS entry point, который инициализирует raylib и запускает `Game`.
-4. Добавить папку `assets/` в app bundle.
+- `CMakeLists.txt` — iOS bundle target с общим C++ кодом.
+- `build_ios.sh` — генерация Xcode build directory и сборка Release.
 
-## Что уже готово в проекте
+## Сборка
 
-- Игровая логика находится в переносимых C++17-файлах.
-- Внешние ассеты сгруппированы по типам.
-- Web-сборка уже вынесена в CMake как пример платформенной настройки.
+Нужны macOS, Xcode, CMake и raylib, доступный через `find_package(raylib)`.
 
-## Следующий практический шаг
+```bash
+./build_ios.sh
+```
 
-Создать Xcode target и подключить raylib iOS template как основу для запуска.
+Скрипт копирует `assets/` в bundle resources после сборки.

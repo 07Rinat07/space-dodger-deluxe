@@ -1,20 +1,24 @@
 # Android wrapper
 
-Здесь описана минимальная обвязка для Android-порта поверх raylib.
+Здесь лежит стартовый Android Gradle/NDK-проект для порта поверх raylib.
 
-## Подход
+## Содержимое
 
-1. Собрать raylib для Android NDK.
-2. Использовать текущие `src/` и `include/` как общий игровой модуль.
-3. Добавить Android Activity, которая создаёт окно raylib и запускает `Game`.
-4. Скопировать `assets/` в Android assets.
+- `settings.gradle` и `build.gradle` — Gradle-конфигурация.
+- `app/build.gradle` — Android application target.
+- `app/src/main/AndroidManifest.xml` — `NativeActivity`.
+- `app/src/main/cpp/CMakeLists.txt` — подключение общего C++ кода.
+- `app/src/main/assets/` — место для копии папки `assets/`.
 
-## Что уже готово в проекте
+## Сборка
 
-- Игра не зависит от абсолютных путей.
-- Ассеты лежат в `assets/textures`, `assets/sounds`, `assets/music`.
-- Логика игры отделена от тестов через `UNIT_TEST`.
+Нужны Android Studio, Android SDK, Android NDK и raylib checkout, собранный/настроенный для Android.
 
-## Следующий практический шаг
+Пример:
 
-Создать Gradle-проект с CMake/NDK и подключить этот репозиторий как native source set.
+```bash
+cp -R ../../assets app/src/main/assets/
+./gradlew assembleDebug -PRAYLIB_ANDROID_SOURCE=/path/to/raylib
+```
+
+В `app/src/main/cpp/CMakeLists.txt` переменная `RAYLIB_ANDROID_SOURCE` должна указывать на локальный raylib checkout.
