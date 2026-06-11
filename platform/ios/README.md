@@ -10,6 +10,7 @@
 ## Сборка
 
 Нужны macOS, Xcode, CMake и raylib, доступный через `find_package(raylib)`.
+На Linux этот проект можно только подготовить/проверить статически: реальная сборка и запуск требуют `xcodebuild` из Xcode.
 
 ```bash
 ./build_ios.sh

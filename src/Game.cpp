@@ -122,6 +122,12 @@ void Game::HandleInput() {
             saveData_.soundEnabled = !saveData_.soundEnabled;
             SaveSettings();
         }
+        if (IsKeyPressed(KEY_C)) {
+            saveData_.leaderboard.clear();
+            highScore_ = 0;
+            saveData_.highScore = 0;
+            SaveSettings();
+        }
         if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER)) {
             state_ = GameState::Menu;
         }
@@ -206,6 +212,7 @@ void Game::StartNewGame() {
     enemyProjectiles_.clear();
     pickups_.clear();
     particles_.clear();
+    explosionVisuals_.clear();
     score_ = 0;
     bonusScore_ = 0;
     survivedTime_ = 0.0f;
@@ -271,8 +278,8 @@ void Game::SpawnBoss() {
     bossAttackTimer_ = 1.2f;
 }
 
-void Game::SpawnBossProjectile(Vector2 position, Vector2 velocity, float radius) {
-    enemyProjectiles_.emplace_back(position, velocity, radius);
+void Game::SpawnBossProjectile(Vector2 position, Vector2 velocity, float radius, ProjectilePattern pattern, float amplitude, float frequency) {
+    enemyProjectiles_.emplace_back(position, velocity, radius, pattern, amplitude, frequency);
 }
 
 void Game::UpdateBossPatterns(float dt) {
@@ -296,10 +303,10 @@ void Game::UpdateBossPatterns(float dt) {
         if (type == AsteroidType::BossStriker) {
             spawned.emplace_back(Vector2{origin.x - 34.0f, origin.y + 45.0f}, Vector2{-110.0f, 260.0f}, 18.0f, 2.2f, AsteroidType::Fast);
             spawned.emplace_back(Vector2{origin.x + 34.0f, origin.y + 45.0f}, Vector2{110.0f, 260.0f}, 18.0f, -2.2f, AsteroidType::Fast);
-            SpawnBossProjectile(Vector2{origin.x, origin.y + 52.0f}, Vector2{0.0f, finalPhase ? 420.0f : 330.0f}, finalPhase ? 11.0f : 9.0f);
+            SpawnBossProjectile(Vector2{origin.x, origin.y + 52.0f}, Vector2{0.0f, finalPhase ? 420.0f : 330.0f}, finalPhase ? 11.0f : 9.0f, ProjectilePattern::Sine, finalPhase ? 34.0f : 22.0f, finalPhase ? 9.0f : 6.5f);
             if (midPhase) {
-                SpawnBossProjectile(Vector2{origin.x - 28.0f, origin.y + 48.0f}, Vector2{-140.0f, 320.0f}, 8.0f);
-                SpawnBossProjectile(Vector2{origin.x + 28.0f, origin.y + 48.0f}, Vector2{140.0f, 320.0f}, 8.0f);
+                SpawnBossProjectile(Vector2{origin.x - 28.0f, origin.y + 48.0f}, Vector2{-140.0f, 320.0f}, 8.0f, ProjectilePattern::Arc, 190.0f);
+                SpawnBossProjectile(Vector2{origin.x + 28.0f, origin.y + 48.0f}, Vector2{140.0f, 320.0f}, 8.0f, ProjectilePattern::Arc, 190.0f);
             }
             bossAttackTimer_ = finalPhase ? 0.62f : 1.0f;
         } else if (type == AsteroidType::BossCarrier) {
@@ -307,14 +314,20 @@ void Game::UpdateBossPatterns(float dt) {
             spawned.emplace_back(Vector2{origin.x + 46.0f, origin.y + 60.0f}, Vector2{55.0f, 190.0f}, 24.0f, -1.0f, AsteroidType::Rock);
             spawned.emplace_back(Vector2{origin.x, origin.y + 72.0f}, Vector2{0.0f, 180.0f}, 30.0f, 0.6f, AsteroidType::Heavy);
             if (midPhase) {
-                SpawnBossProjectile(Vector2{origin.x - 58.0f, origin.y + 48.0f}, Vector2{-90.0f, 260.0f}, 10.0f);
-                SpawnBossProjectile(Vector2{origin.x + 58.0f, origin.y + 48.0f}, Vector2{90.0f, 260.0f}, 10.0f);
+                SpawnBossProjectile(Vector2{origin.x - 58.0f, origin.y + 48.0f}, Vector2{-90.0f, 260.0f}, 10.0f, ProjectilePattern::Drift, 120.0f, 7.5f);
+                SpawnBossProjectile(Vector2{origin.x + 58.0f, origin.y + 48.0f}, Vector2{90.0f, 260.0f}, 10.0f, ProjectilePattern::Drift, -120.0f, 7.5f);
+                if (finalPhase) {
+                    SpawnBossProjectile(Vector2{origin.x, origin.y + 56.0f}, Vector2{0.0f, 310.0f}, 12.0f, ProjectilePattern::Sine, 48.0f, 8.0f);
+                }
             }
             bossAttackTimer_ = finalPhase ? 1.05f : 1.7f;
         } else {
             spawned.emplace_back(Vector2{origin.x, origin.y + 56.0f}, Vector2{0.0f, 240.0f}, 26.0f, 1.8f, AsteroidType::Heavy);
-            SpawnBossProjectile(Vector2{origin.x - 34.0f, origin.y + 42.0f}, Vector2{-70.0f, finalPhase ? 360.0f : 285.0f}, 9.0f);
-            SpawnBossProjectile(Vector2{origin.x + 34.0f, origin.y + 42.0f}, Vector2{70.0f, finalPhase ? 360.0f : 285.0f}, 9.0f);
+            SpawnBossProjectile(Vector2{origin.x - 34.0f, origin.y + 42.0f}, Vector2{-70.0f, finalPhase ? 360.0f : 285.0f}, 9.0f, ProjectilePattern::Drift, finalPhase ? 105.0f : 60.0f, 5.5f);
+            SpawnBossProjectile(Vector2{origin.x + 34.0f, origin.y + 42.0f}, Vector2{70.0f, finalPhase ? 360.0f : 285.0f}, 9.0f, ProjectilePattern::Drift, finalPhase ? -105.0f : -60.0f, 5.5f);
+            if (midPhase) {
+                SpawnBossProjectile(Vector2{origin.x, origin.y + 44.0f}, Vector2{0.0f, finalPhase ? 390.0f : 315.0f}, 10.0f, ProjectilePattern::Arc, finalPhase ? 260.0f : 180.0f);
+            }
             bossAttackTimer_ = finalPhase ? 0.85f : 1.35f;
         }
     }
@@ -342,6 +355,7 @@ void Game::FireBullet() {
 }
 
 void Game::SpawnExplosion(Vector2 position, Color color, int count) {
+    explosionVisuals_.push_back({position, 0.0f, 0.42f, RandomFloat(96.0f, 168.0f)});
     for (int i = 0; i < count; ++i) {
         const float angle = RandomFloat(0.0f, 2.0f * PI);
         const float speed = RandomFloat(80.0f, 420.0f);
@@ -433,6 +447,16 @@ void Game::UpdateParticles(float dt) {
             return particle.IsDead();
         }),
         particles_.end()
+    );
+
+    for (ExplosionVisual& explosion : explosionVisuals_) {
+        explosion.age += dt;
+    }
+    explosionVisuals_.erase(
+        std::remove_if(explosionVisuals_.begin(), explosionVisuals_.end(), [](const ExplosionVisual& explosion) {
+            return explosion.age >= explosion.duration;
+        }),
+        explosionVisuals_.end()
     );
 }
 
@@ -624,6 +648,7 @@ void Game::DrawSettings() const {
     DrawCenteredText(difficultyText.str(), 275, 26, RAYWHITE);
     DrawCenteredText(saveData_.musicEnabled ? "M - music: on" : "M - music: off", 325, 24, saveData_.musicEnabled ? GREEN : RED);
     DrawCenteredText(saveData_.soundEnabled ? "N - sounds: on" : "N - sounds: off", 365, 24, saveData_.soundEnabled ? GREEN : RED);
+    DrawCenteredText("C - clear leaderboard", 405, 24, ORANGE);
     DrawCenteredText("ENTER or ESC - back", 455, 24, LIGHTGRAY);
 }
 
@@ -645,10 +670,25 @@ void Game::DrawPlaying() const {
                 texture = &asteroidHeavyTexture_;
             } else if (asteroid.GetType() == AsteroidType::BossCruiser) {
                 texture = &bossCruiserTexture_;
+                if (animationReady_) {
+                    const int frame = static_cast<int>(GetTime() * 7.0) % 4;
+                    DrawTextureFrame(bossCruiserAnimTexture_, 4, frame, asteroid.GetPosition(), asteroid.GetRadius() * 2.25f);
+                    continue;
+                }
             } else if (asteroid.GetType() == AsteroidType::BossStriker) {
                 texture = &bossStrikerTexture_;
+                if (animationReady_) {
+                    const int frame = static_cast<int>(GetTime() * 8.5) % 4;
+                    DrawTextureFrame(bossStrikerAnimTexture_, 4, frame, asteroid.GetPosition(), asteroid.GetRadius() * 2.25f);
+                    continue;
+                }
             } else if (asteroid.GetType() == AsteroidType::BossCarrier) {
                 texture = &bossCarrierTexture_;
+                if (animationReady_) {
+                    const int frame = static_cast<int>(GetTime() * 6.0) % 4;
+                    DrawTextureFrame(bossCarrierAnimTexture_, 4, frame, asteroid.GetPosition(), asteroid.GetRadius() * 2.25f);
+                    continue;
+                }
             }
             DrawTextureAsset(*texture, asteroid.GetPosition(), asteroid.GetRadius() * 2.25f);
         } else {
@@ -676,8 +716,20 @@ void Game::DrawPlaying() const {
         particle.Draw();
     }
 
+    if (animationReady_) {
+        for (const ExplosionVisual& explosion : explosionVisuals_) {
+            const int frame = std::min(7, static_cast<int>((explosion.age / explosion.duration) * 8.0f));
+            DrawTextureFrame(explosionAnimTexture_, 8, frame, explosion.position, explosion.size);
+        }
+    }
+
     if (artReady_) {
-        DrawTextureAsset(playerTexture_, player_.GetPosition(), player_.GetRadius() * 3.2f);
+        if (animationReady_) {
+            const int frame = static_cast<int>(GetTime() * 10.0) % 4;
+            DrawTextureFrame(playerAnimTexture_, 4, frame, player_.GetPosition(), player_.GetRadius() * 3.2f);
+        } else {
+            DrawTextureAsset(playerTexture_, player_.GetPosition(), player_.GetRadius() * 3.2f);
+        }
         if (player_.HasShield()) {
             DrawCircleLines(static_cast<int>(player_.GetPosition().x), static_cast<int>(player_.GetPosition().y), player_.GetRadius() + 22.0f, SKYBLUE);
         }
@@ -798,8 +850,14 @@ void Game::InitializeAssets() {
     const bool bossLoaded = LoadTextureIfExists(bossCruiserTexture_, "assets/textures/sprites/boss_cruiser.png");
     const bool bossStrikerLoaded = LoadTextureIfExists(bossStrikerTexture_, "assets/textures/sprites/boss_striker.png");
     const bool bossCarrierLoaded = LoadTextureIfExists(bossCarrierTexture_, "assets/textures/sprites/boss_carrier.png");
+    const bool playerAnimLoaded = LoadTextureIfExists(playerAnimTexture_, "assets/textures/sprites/player_ship_anim.png");
+    const bool bossCruiserAnimLoaded = LoadTextureIfExists(bossCruiserAnimTexture_, "assets/textures/sprites/boss_cruiser_anim.png");
+    const bool bossStrikerAnimLoaded = LoadTextureIfExists(bossStrikerAnimTexture_, "assets/textures/sprites/boss_striker_anim.png");
+    const bool bossCarrierAnimLoaded = LoadTextureIfExists(bossCarrierAnimTexture_, "assets/textures/sprites/boss_carrier_anim.png");
+    const bool explosionAnimLoaded = LoadTextureIfExists(explosionAnimTexture_, "assets/textures/sprites/explosion_anim.png");
     artReady_ = playerLoaded && rockLoaded && fastLoaded && heavyLoaded && bulletLoaded && enemyProjectileLoaded &&
         scoreLoaded && shieldLoaded && bossLoaded && bossStrikerLoaded && bossCarrierLoaded;
+    animationReady_ = playerAnimLoaded && bossCruiserAnimLoaded && bossStrikerAnimLoaded && bossCarrierAnimLoaded && explosionAnimLoaded;
 }
 
 void Game::ShutdownAssets() {
@@ -814,7 +872,13 @@ void Game::ShutdownAssets() {
     if (bossCruiserTexture_.id != 0) UnloadTexture(bossCruiserTexture_);
     if (bossStrikerTexture_.id != 0) UnloadTexture(bossStrikerTexture_);
     if (bossCarrierTexture_.id != 0) UnloadTexture(bossCarrierTexture_);
+    if (playerAnimTexture_.id != 0) UnloadTexture(playerAnimTexture_);
+    if (bossCruiserAnimTexture_.id != 0) UnloadTexture(bossCruiserAnimTexture_);
+    if (bossStrikerAnimTexture_.id != 0) UnloadTexture(bossStrikerAnimTexture_);
+    if (bossCarrierAnimTexture_.id != 0) UnloadTexture(bossCarrierAnimTexture_);
+    if (explosionAnimTexture_.id != 0) UnloadTexture(explosionAnimTexture_);
     artReady_ = false;
+    animationReady_ = false;
 }
 
 bool Game::LoadTextureIfExists(Texture2D& texture, const char* path) {
@@ -833,6 +897,15 @@ void Game::DrawTextureAsset(const Texture2D& texture, Vector2 center, float size
         size,
         size
     };
+    DrawTexturePro(texture, source, destination, {size / 2.0f, size / 2.0f}, rotation, WHITE);
+}
+
+void Game::DrawTextureFrame(const Texture2D& texture, int frameCount, int frameIndex, Vector2 center, float size, float rotation) const {
+    const int safeFrameCount = std::max(1, frameCount);
+    const int safeFrameIndex = std::max(0, std::min(frameIndex, safeFrameCount - 1));
+    const float frameWidth = static_cast<float>(texture.width) / static_cast<float>(safeFrameCount);
+    const Rectangle source{frameWidth * static_cast<float>(safeFrameIndex), 0.0f, frameWidth, static_cast<float>(texture.height)};
+    const Rectangle destination{center.x, center.y, size, size};
     DrawTexturePro(texture, source, destination, {size / 2.0f, size / 2.0f}, rotation, WHITE);
 }
 
@@ -875,10 +948,10 @@ void Game::InitializeAudio() {
         explosionSound_ = CreateTone(120.0f, 0.22f, 0.34f);
     }
 
-    LoadMusicTrack(MusicTrack::Menu, "assets/music/menu_theme.wav");
-    LoadMusicTrack(MusicTrack::Game, "assets/music/game_theme.wav");
-    LoadMusicTrack(MusicTrack::Boss, "assets/music/boss_theme.wav");
-    LoadMusicTrack(MusicTrack::GameOver, "assets/music/gameover_theme.wav");
+    LoadMusicTrack(MusicTrack::Menu, "assets/music/menu_theme.ogg");
+    LoadMusicTrack(MusicTrack::Game, "assets/music/game_theme.ogg");
+    LoadMusicTrack(MusicTrack::Boss, "assets/music/boss_theme.ogg");
+    LoadMusicTrack(MusicTrack::GameOver, "assets/music/gameover_theme.ogg");
 
     SetAudioStreamBufferSizeDefault(512);
     musicStream_ = LoadAudioStream(22050, 16, 1);

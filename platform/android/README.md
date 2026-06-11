@@ -22,3 +22,13 @@ cp -R ../../assets app/src/main/assets/
 ```
 
 В `app/src/main/cpp/CMakeLists.txt` переменная `RAYLIB_ANDROID_SOURCE` должна указывать на локальный raylib checkout.
+В этом проекте debug APK также проверялся через локальные `.android-sdk/` и `.dev-tools/`; точную команду подсказывает `../../scripts/check_mobile_env.sh`.
+
+## Проверка на устройстве
+
+Для запуска нужен подключенный Android-телефон с USB debugging или запущенный эмулятор:
+
+```bash
+adb devices
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```

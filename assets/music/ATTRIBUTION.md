@@ -9,7 +9,7 @@ Music files in this folder are from:
 
 Used files:
 
-- `menu_theme.wav` from `Juhani Junkala [Retro Game Music Pack] Title Screen.wav`
-- `game_theme.wav` from `Juhani Junkala [Retro Game Music Pack] Level 1.wav`
-- `boss_theme.wav` from `Juhani Junkala [Retro Game Music Pack] Level 3.wav`
-- `gameover_theme.wav` from `Juhani Junkala [Retro Game Music Pack] Ending.wav`
+- `menu_theme.ogg` from `Juhani Junkala [Retro Game Music Pack] Title Screen.wav`
+- `game_theme.ogg` from `Juhani Junkala [Retro Game Music Pack] Level 1.wav`
+- `boss_theme.ogg` from `Juhani Junkala [Retro Game Music Pack] Level 3.wav`
+- `gameover_theme.ogg` from `Juhani Junkala [Retro Game Music Pack] Ending.wav`

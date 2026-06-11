@@ -238,6 +238,25 @@ void TestEnemyProjectileMovementAndBounds() {
     ASSERT_TRUE(projectile.IsOffScreen());
 }
 
+void TestEnemyProjectilePatterns() {
+    EnemyProjectile sine({100.0f, 20.0f}, {0.0f, 100.0f}, 8.0f, ProjectilePattern::Sine, 30.0f, 3.0f);
+    sine.Update(0.5f);
+    ASSERT_TRUE(sine.GetPattern() == ProjectilePattern::Sine);
+    ASSERT_TRUE(sine.GetPosition().x > 120.0f);
+    ASSERT_NEAR(sine.GetPosition().y, 70.0f, 0.001f);
+
+    EnemyProjectile arc({10.0f, 10.0f}, {20.0f, 100.0f}, 7.0f, ProjectilePattern::Arc, 200.0f);
+    arc.Update(0.5f);
+    ASSERT_TRUE(arc.GetPattern() == ProjectilePattern::Arc);
+    ASSERT_NEAR(arc.GetPosition().x, 20.0f, 0.001f);
+    ASSERT_TRUE(arc.GetPosition().y > 60.0f);
+
+    EnemyProjectile drift({50.0f, 20.0f}, {0.0f, 100.0f}, 7.0f, ProjectilePattern::Drift, 120.0f, 5.0f);
+    drift.Update(0.5f);
+    ASSERT_TRUE(drift.GetPattern() == ProjectilePattern::Drift);
+    ASSERT_TRUE(drift.GetPosition().x > 50.0f);
+}
+
 void TestBulletMovementAndBounds() {
     Bullet bullet({40.0f, 100.0f}, 200.0f);
 
@@ -320,6 +339,7 @@ int main() {
     TestAsteroidMovementAndBounds();
     TestAsteroidTypesAndDamage();
     TestEnemyProjectileMovementAndBounds();
+    TestEnemyProjectilePatterns();
     TestBulletMovementAndBounds();
     TestPickupMovementTypeAndBounds();
     TestParticleMovementAndLifetime();

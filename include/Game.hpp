@@ -68,6 +68,13 @@ private:
     bool exitRequested_ = false;
     bool scoreSubmitted_ = true;
     std::string playerName_ = "PLAYER";
+    struct ExplosionVisual {
+        Vector2 position{};
+        float age = 0.0f;
+        float duration = 0.42f;
+        float size = 120.0f;
+    };
+    std::vector<ExplosionVisual> explosionVisuals_;
 
 #ifndef UNIT_TEST
     bool artReady_ = false;
@@ -82,6 +89,12 @@ private:
     Texture2D bossCruiserTexture_{};
     Texture2D bossStrikerTexture_{};
     Texture2D bossCarrierTexture_{};
+    Texture2D playerAnimTexture_{};
+    Texture2D bossCruiserAnimTexture_{};
+    Texture2D bossStrikerAnimTexture_{};
+    Texture2D bossCarrierAnimTexture_{};
+    Texture2D explosionAnimTexture_{};
+    bool animationReady_ = false;
     bool audioReady_ = false;
     bool externalShotReady_ = false;
     bool externalPickupReady_ = false;
@@ -107,7 +120,7 @@ private:
 
     void SpawnAsteroid();
     void SpawnBoss();
-    void SpawnBossProjectile(Vector2 position, Vector2 velocity, float radius);
+    void SpawnBossProjectile(Vector2 position, Vector2 velocity, float radius, ProjectilePattern pattern = ProjectilePattern::Straight, float amplitude = 0.0f, float frequency = 1.0f);
     void UpdateBossPatterns(float dt);
     void SpawnPickup();
     void FireBullet();
@@ -139,6 +152,7 @@ private:
     void ShutdownAssets();
     bool LoadTextureIfExists(Texture2D& texture, const char* path);
     void DrawTextureAsset(const Texture2D& texture, Vector2 center, float size, float rotation = 0.0f) const;
+    void DrawTextureFrame(const Texture2D& texture, int frameCount, int frameIndex, Vector2 center, float size, float rotation = 0.0f) const;
     bool HasLivingBoss() const;
     void InitializeAudio();
     void ShutdownAudio();
