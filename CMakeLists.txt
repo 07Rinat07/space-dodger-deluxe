@@ -42,6 +42,7 @@ add_executable(space_dodger
     src/main.cpp
     src/Game.cpp
     src/Bullet.cpp
+    src/EnemyProjectile.cpp
     src/WaveSystem.cpp
     src/Player.cpp
     src/Asteroid.cpp
@@ -69,6 +70,7 @@ add_executable(unit_tests
     tests/UnitTests.cpp
     src/Asteroid.cpp
     src/Bullet.cpp
+    src/EnemyProjectile.cpp
     src/WaveSystem.cpp
     src/Pickup.cpp
     src/Particle.cpp

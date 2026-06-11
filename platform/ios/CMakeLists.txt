@@ -13,6 +13,7 @@ add_executable(space_dodger_ios MACOSX_BUNDLE
     ${PROJECT_ROOT}/src/main.cpp
     ${PROJECT_ROOT}/src/Game.cpp
     ${PROJECT_ROOT}/src/Bullet.cpp
+    ${PROJECT_ROOT}/src/EnemyProjectile.cpp
     ${PROJECT_ROOT}/src/WaveSystem.cpp
     ${PROJECT_ROOT}/src/Player.cpp
     ${PROJECT_ROOT}/src/Asteroid.cpp

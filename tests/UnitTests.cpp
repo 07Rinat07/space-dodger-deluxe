@@ -1,5 +1,6 @@
 #include "../include/Asteroid.hpp"
 #include "../include/Bullet.hpp"
+#include "../include/EnemyProjectile.hpp"
 #include "../include/Particle.hpp"
 #include "../include/Player.hpp"
 #include "../include/Pickup.hpp"
@@ -218,8 +219,23 @@ void TestAsteroidTypesAndDamage() {
 
     ASSERT_TRUE(boss.GetType() == AsteroidType::BossCruiser);
     ASSERT_TRUE(boss.GetHealth() > heavy.GetHealth());
+    ASSERT_EQ(boss.GetMaxHealth(), boss.GetHealth());
     ASSERT_TRUE(boss.GetScoreValue() > heavy.GetScoreValue());
     ASSERT_TRUE(carrier.GetHealth() > boss.GetHealth());
+}
+
+void TestEnemyProjectileMovementAndBounds() {
+    EnemyProjectile projectile({20.0f, 30.0f}, {40.0f, 120.0f}, 9.0f);
+
+    projectile.Update(0.5f);
+
+    ASSERT_NEAR(projectile.GetPosition().x, 40.0f, 0.001f);
+    ASSERT_NEAR(projectile.GetPosition().y, 90.0f, 0.001f);
+    ASSERT_NEAR(projectile.GetRadius(), 9.0f, 0.001f);
+    ASSERT_TRUE(!projectile.IsOffScreen());
+
+    projectile.Update(6.0f);
+    ASSERT_TRUE(projectile.IsOffScreen());
 }
 
 void TestBulletMovementAndBounds() {
@@ -303,6 +319,7 @@ int main() {
     TestWaveSystem();
     TestAsteroidMovementAndBounds();
     TestAsteroidTypesAndDamage();
+    TestEnemyProjectileMovementAndBounds();
     TestBulletMovementAndBounds();
     TestPickupMovementTypeAndBounds();
     TestParticleMovementAndLifetime();

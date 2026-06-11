@@ -88,6 +88,10 @@ void Game::HandleInput() {
         state_ = GameState::Settings;
     }
 
+    if (IsKeyPressed(KEY_L) && state_ == GameState::Menu) {
+        state_ = GameState::Leaderboard;
+    }
+
     if (state_ == GameState::NameEntry) {
         int key = GetCharPressed();
         while (key > 0) {
@@ -183,6 +187,9 @@ void Game::Draw() const {
             DrawPlaying();
             DrawNameEntry();
             break;
+        case GameState::Leaderboard:
+            DrawLeaderboard();
+            break;
         case GameState::Settings:
             DrawSettings();
             break;
@@ -196,6 +203,7 @@ void Game::StartNewGame() {
     player_.Reset();
     asteroids_.clear();
     bullets_.clear();
+    enemyProjectiles_.clear();
     pickups_.clear();
     particles_.clear();
     score_ = 0;
@@ -263,6 +271,10 @@ void Game::SpawnBoss() {
     bossAttackTimer_ = 1.2f;
 }
 
+void Game::SpawnBossProjectile(Vector2 position, Vector2 velocity, float radius) {
+    enemyProjectiles_.emplace_back(position, velocity, radius);
+}
+
 void Game::UpdateBossPatterns(float dt) {
     bossAttackTimer_ -= dt;
     if (bossAttackTimer_ > 0.0f) {
@@ -277,18 +289,33 @@ void Game::UpdateBossPatterns(float dt) {
         }
 
         const Vector2 origin = asteroid.GetPosition();
+        const float healthRatio = static_cast<float>(asteroid.GetHealth()) / static_cast<float>(std::max(1, asteroid.GetMaxHealth()));
+        const bool finalPhase = healthRatio <= 0.35f;
+        const bool midPhase = healthRatio <= 0.68f;
+
         if (type == AsteroidType::BossStriker) {
             spawned.emplace_back(Vector2{origin.x - 34.0f, origin.y + 45.0f}, Vector2{-110.0f, 260.0f}, 18.0f, 2.2f, AsteroidType::Fast);
             spawned.emplace_back(Vector2{origin.x + 34.0f, origin.y + 45.0f}, Vector2{110.0f, 260.0f}, 18.0f, -2.2f, AsteroidType::Fast);
-            bossAttackTimer_ = 1.0f;
+            SpawnBossProjectile(Vector2{origin.x, origin.y + 52.0f}, Vector2{0.0f, finalPhase ? 420.0f : 330.0f}, finalPhase ? 11.0f : 9.0f);
+            if (midPhase) {
+                SpawnBossProjectile(Vector2{origin.x - 28.0f, origin.y + 48.0f}, Vector2{-140.0f, 320.0f}, 8.0f);
+                SpawnBossProjectile(Vector2{origin.x + 28.0f, origin.y + 48.0f}, Vector2{140.0f, 320.0f}, 8.0f);
+            }
+            bossAttackTimer_ = finalPhase ? 0.62f : 1.0f;
         } else if (type == AsteroidType::BossCarrier) {
             spawned.emplace_back(Vector2{origin.x - 46.0f, origin.y + 60.0f}, Vector2{-55.0f, 190.0f}, 24.0f, 1.0f, AsteroidType::Rock);
             spawned.emplace_back(Vector2{origin.x + 46.0f, origin.y + 60.0f}, Vector2{55.0f, 190.0f}, 24.0f, -1.0f, AsteroidType::Rock);
             spawned.emplace_back(Vector2{origin.x, origin.y + 72.0f}, Vector2{0.0f, 180.0f}, 30.0f, 0.6f, AsteroidType::Heavy);
-            bossAttackTimer_ = 1.7f;
+            if (midPhase) {
+                SpawnBossProjectile(Vector2{origin.x - 58.0f, origin.y + 48.0f}, Vector2{-90.0f, 260.0f}, 10.0f);
+                SpawnBossProjectile(Vector2{origin.x + 58.0f, origin.y + 48.0f}, Vector2{90.0f, 260.0f}, 10.0f);
+            }
+            bossAttackTimer_ = finalPhase ? 1.05f : 1.7f;
         } else {
             spawned.emplace_back(Vector2{origin.x, origin.y + 56.0f}, Vector2{0.0f, 240.0f}, 26.0f, 1.8f, AsteroidType::Heavy);
-            bossAttackTimer_ = 1.35f;
+            SpawnBossProjectile(Vector2{origin.x - 34.0f, origin.y + 42.0f}, Vector2{-70.0f, finalPhase ? 360.0f : 285.0f}, 9.0f);
+            SpawnBossProjectile(Vector2{origin.x + 34.0f, origin.y + 42.0f}, Vector2{70.0f, finalPhase ? 360.0f : 285.0f}, 9.0f);
+            bossAttackTimer_ = finalPhase ? 0.85f : 1.35f;
         }
     }
 
@@ -382,6 +409,10 @@ void Game::UpdatePlaying(float dt) {
 
     for (Bullet& bullet : bullets_) {
         bullet.Update(dt);
+    }
+
+    for (EnemyProjectile& projectile : enemyProjectiles_) {
+        projectile.Update(dt);
     }
 
     for (Pickup& pickup : pickups_) {
@@ -505,6 +536,19 @@ void Game::CheckCollisions() {
         }
     }
 
+    for (auto projectileIt = enemyProjectiles_.begin(); projectileIt != enemyProjectiles_.end(); ++projectileIt) {
+        if (CirclesCollide(player_.GetPosition(), player_.GetRadius(), projectileIt->GetPosition(), projectileIt->GetRadius())) {
+            if (player_.HasShield()) {
+                player_.ActivateShield(0.0f);
+                SpawnExplosion(projectileIt->GetPosition(), SKYBLUE, 14);
+                enemyProjectiles_.erase(projectileIt);
+            } else {
+                FinishGame();
+            }
+            return;
+        }
+    }
+
     pickups_.erase(
         std::remove_if(pickups_.begin(), pickups_.end(), [this](const Pickup& pickup) {
             if (CirclesCollide(player_.GetPosition(), player_.GetRadius(), pickup.GetPosition(), pickup.GetRadius())) {
@@ -547,6 +591,13 @@ void Game::RemoveDeadObjects() {
         }),
         bullets_.end()
     );
+
+    enemyProjectiles_.erase(
+        std::remove_if(enemyProjectiles_.begin(), enemyProjectiles_.end(), [](const EnemyProjectile& projectile) {
+            return projectile.IsOffScreen();
+        }),
+        enemyProjectiles_.end()
+    );
 }
 
 void Game::DrawMenu() const {
@@ -555,7 +606,7 @@ void Game::DrawMenu() const {
     DrawCenteredText("arcade with weapons, enemies and procedural audio", 210, 22, RAYWHITE);
 
     DrawCenteredText("ENTER - start game", 315, 28, GREEN);
-    DrawCenteredText("S - settings", 350, 24, SKYBLUE);
+    DrawCenteredText("L - leaderboard   S - settings", 350, 24, SKYBLUE);
     DrawCenteredText("WASD / ARROWS - move, SPACE / CTRL - shoot", 390, 24, LIGHTGRAY);
     DrawCenteredText("P - pause, ESC - menu / exit", 430, 24, LIGHTGRAY);
 
@@ -592,8 +643,12 @@ void Game::DrawPlaying() const {
                 texture = &asteroidFastTexture_;
             } else if (asteroid.GetType() == AsteroidType::Heavy) {
                 texture = &asteroidHeavyTexture_;
-            } else if (asteroid.GetType() == AsteroidType::BossCruiser || asteroid.GetType() == AsteroidType::BossStriker || asteroid.GetType() == AsteroidType::BossCarrier) {
+            } else if (asteroid.GetType() == AsteroidType::BossCruiser) {
                 texture = &bossCruiserTexture_;
+            } else if (asteroid.GetType() == AsteroidType::BossStriker) {
+                texture = &bossStrikerTexture_;
+            } else if (asteroid.GetType() == AsteroidType::BossCarrier) {
+                texture = &bossCarrierTexture_;
             }
             DrawTextureAsset(*texture, asteroid.GetPosition(), asteroid.GetRadius() * 2.25f);
         } else {
@@ -606,6 +661,14 @@ void Game::DrawPlaying() const {
             DrawTextureAsset(bulletTexture_, bullet.GetPosition(), bullet.GetRadius() * 4.0f);
         } else {
             bullet.Draw();
+        }
+    }
+
+    for (const EnemyProjectile& projectile : enemyProjectiles_) {
+        if (artReady_) {
+            DrawTextureAsset(enemyProjectileTexture_, projectile.GetPosition(), projectile.GetRadius() * 3.4f);
+        } else {
+            projectile.Draw();
         }
     }
 
@@ -672,6 +735,25 @@ void Game::DrawNameEntry() const {
     DrawCenteredText("ENTER saves score", 445, 24, GREEN);
 }
 
+void Game::DrawLeaderboard() const {
+    DrawRectangle(0, 0, cfg::ScreenWidth, cfg::ScreenHeight, Fade(BLACK, 0.35f));
+    DrawCenteredText("LEADERBOARD", 120, 46, GOLD);
+
+    int y = 210;
+    if (saveData_.leaderboard.empty()) {
+        DrawCenteredText("No scores yet", y, 26, LIGHTGRAY);
+    } else {
+        for (std::size_t i = 0; i < saveData_.leaderboard.size() && i < 5; ++i) {
+            std::ostringstream row;
+            row << i + 1 << ". " << saveData_.leaderboard[i].name << "  " << saveData_.leaderboard[i].score;
+            DrawCenteredText(row.str(), y, 28, i == 0 ? SKYBLUE : RAYWHITE);
+            y += 48;
+        }
+    }
+
+    DrawCenteredText("ESC - back", 560, 24, LIGHTGRAY);
+}
+
 void Game::DrawHud() const {
     DrawRectangle(14, 12, 260, 82, Fade(BLACK, 0.42f));
     DrawRectangleLines(14, 12, 260, 82, Fade(RAYWHITE, 0.35f));
@@ -710,10 +792,14 @@ void Game::InitializeAssets() {
     const bool fastLoaded = LoadTextureIfExists(asteroidFastTexture_, "assets/textures/sprites/asteroid_fast.png");
     const bool heavyLoaded = LoadTextureIfExists(asteroidHeavyTexture_, "assets/textures/sprites/asteroid_heavy.png");
     const bool bulletLoaded = LoadTextureIfExists(bulletTexture_, "assets/textures/sprites/bullet.png");
+    const bool enemyProjectileLoaded = LoadTextureIfExists(enemyProjectileTexture_, "assets/textures/sprites/enemy_projectile.png");
     const bool scoreLoaded = LoadTextureIfExists(pickupScoreTexture_, "assets/textures/sprites/pickup_score.png");
     const bool shieldLoaded = LoadTextureIfExists(pickupShieldTexture_, "assets/textures/sprites/pickup_shield.png");
     const bool bossLoaded = LoadTextureIfExists(bossCruiserTexture_, "assets/textures/sprites/boss_cruiser.png");
-    artReady_ = playerLoaded && rockLoaded && fastLoaded && heavyLoaded && bulletLoaded && scoreLoaded && shieldLoaded && bossLoaded;
+    const bool bossStrikerLoaded = LoadTextureIfExists(bossStrikerTexture_, "assets/textures/sprites/boss_striker.png");
+    const bool bossCarrierLoaded = LoadTextureIfExists(bossCarrierTexture_, "assets/textures/sprites/boss_carrier.png");
+    artReady_ = playerLoaded && rockLoaded && fastLoaded && heavyLoaded && bulletLoaded && enemyProjectileLoaded &&
+        scoreLoaded && shieldLoaded && bossLoaded && bossStrikerLoaded && bossCarrierLoaded;
 }
 
 void Game::ShutdownAssets() {
@@ -722,9 +808,12 @@ void Game::ShutdownAssets() {
     if (asteroidFastTexture_.id != 0) UnloadTexture(asteroidFastTexture_);
     if (asteroidHeavyTexture_.id != 0) UnloadTexture(asteroidHeavyTexture_);
     if (bulletTexture_.id != 0) UnloadTexture(bulletTexture_);
+    if (enemyProjectileTexture_.id != 0) UnloadTexture(enemyProjectileTexture_);
     if (pickupScoreTexture_.id != 0) UnloadTexture(pickupScoreTexture_);
     if (pickupShieldTexture_.id != 0) UnloadTexture(pickupShieldTexture_);
     if (bossCruiserTexture_.id != 0) UnloadTexture(bossCruiserTexture_);
+    if (bossStrikerTexture_.id != 0) UnloadTexture(bossStrikerTexture_);
+    if (bossCarrierTexture_.id != 0) UnloadTexture(bossCarrierTexture_);
     artReady_ = false;
 }
 

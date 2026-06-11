@@ -24,7 +24,8 @@ Asteroid::Asteroid(Vector2 position, Vector2 velocity, float radius, float rotat
       rotation_(0.0f),
       rotationSpeed_(rotationSpeed),
       type_(type),
-      health_(InitialHealth(type)) {}
+      health_(InitialHealth(type)),
+      maxHealth_(InitialHealth(type)) {}
 
 void Asteroid::Update(float dt) {
     position_.x += velocity_.x * dt;
@@ -84,6 +85,10 @@ AsteroidType Asteroid::GetType() const {
 
 int Asteroid::GetHealth() const {
     return health_;
+}
+
+int Asteroid::GetMaxHealth() const {
+    return maxHealth_;
 }
 
 int Asteroid::GetScoreValue() const {

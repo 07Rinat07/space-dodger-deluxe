@@ -5,6 +5,7 @@ plugins {
 android {
     namespace "com.spacedodger.deluxe"
     compileSdk 35
+    ndkVersion "26.3.11579264"
 
     defaultConfig {
         applicationId "com.spacedodger.deluxe"

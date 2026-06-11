@@ -2,6 +2,7 @@
 
 #include "Asteroid.hpp"
 #include "Bullet.hpp"
+#include "EnemyProjectile.hpp"
 #include "Particle.hpp"
 #include "Pickup.hpp"
 #include "Player.hpp"
@@ -19,6 +20,7 @@ enum class GameState {
     Paused,
     GameOver,
     NameEntry,
+    Leaderboard,
     Settings
 };
 
@@ -46,6 +48,7 @@ private:
     Starfield starfield_;
     std::vector<Asteroid> asteroids_;
     std::vector<Bullet> bullets_;
+    std::vector<EnemyProjectile> enemyProjectiles_;
     std::vector<Pickup> pickups_;
     std::vector<Particle> particles_;
 
@@ -73,9 +76,12 @@ private:
     Texture2D asteroidFastTexture_{};
     Texture2D asteroidHeavyTexture_{};
     Texture2D bulletTexture_{};
+    Texture2D enemyProjectileTexture_{};
     Texture2D pickupScoreTexture_{};
     Texture2D pickupShieldTexture_{};
     Texture2D bossCruiserTexture_{};
+    Texture2D bossStrikerTexture_{};
+    Texture2D bossCarrierTexture_{};
     bool audioReady_ = false;
     bool externalShotReady_ = false;
     bool externalPickupReady_ = false;
@@ -101,6 +107,7 @@ private:
 
     void SpawnAsteroid();
     void SpawnBoss();
+    void SpawnBossProjectile(Vector2 position, Vector2 velocity, float radius);
     void UpdateBossPatterns(float dt);
     void SpawnPickup();
     void FireBullet();
@@ -120,6 +127,7 @@ private:
     void DrawPaused() const;
     void DrawGameOver() const;
     void DrawNameEntry() const;
+    void DrawLeaderboard() const;
     void DrawHud() const;
     void DrawCenteredText(const std::string& text, int y, int fontSize, Color color) const;
 

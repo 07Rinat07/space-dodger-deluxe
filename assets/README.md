@@ -16,7 +16,10 @@ assets/
 │       ├── pickup_score.png
 │       ├── pickup_shield.png
 │       ├── bullet.png
-│       └── boss_cruiser.png
+│       ├── enemy_projectile.png
+│       ├── boss_cruiser.png
+│       ├── boss_striker.png
+│       └── boss_carrier.png
 ├── sounds/
 │   ├── shot.wav
 │   ├── pickup.wav
@@ -25,6 +28,7 @@ assets/
 │   ├── menu_theme.wav
 │   ├── game_theme.wav
 │   ├── boss_theme.wav
-│   └── gameover_theme.wav
+│   ├── gameover_theme.wav
+│   └── ATTRIBUTION.md
 └── fonts/
 ```

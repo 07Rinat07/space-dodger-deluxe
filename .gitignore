@@ -6,6 +6,12 @@ CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
 Makefile
+.dev-tools/
+.android-sdk/
+platform/android/.gradle/
+platform/android/app/.cxx/
+platform/android/app/build/
+platform/android/app/src/main/assets/
 
 # Executables and binaries
 *.exe

@@ -23,6 +23,7 @@ public:
     float GetRadius() const;
     AsteroidType GetType() const;
     int GetHealth() const;
+    int GetMaxHealth() const;
     int GetScoreValue() const;
     bool IsOffScreen() const;
 
@@ -34,4 +35,5 @@ private:
     float rotationSpeed_{};
     AsteroidType type_{};
     int health_{};
+    int maxHealth_{};
 };
