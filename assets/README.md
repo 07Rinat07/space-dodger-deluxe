@@ -8,7 +8,12 @@
 ```text
 assets/
 ├── textures/
+│   └── spritesheet.png
 ├── sounds/
+│   ├── shot.wav
+│   ├── pickup.wav
+│   └── explosion.wav
 ├── music/
+│   └── theme.wav
 └── fonts/
 ```

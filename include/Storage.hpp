@@ -2,6 +2,7 @@
 
 #include "Config.hpp"
 #include <string>
+#include <vector>
 
 enum class DifficultyLevel {
     Easy,
@@ -14,6 +15,7 @@ struct SaveData {
     DifficultyLevel difficulty = DifficultyLevel::Normal;
     bool soundEnabled = true;
     bool musicEnabled = true;
+    std::vector<int> leaderboard;
 };
 
 class Storage {
@@ -30,3 +32,4 @@ DifficultyLevel NextDifficulty(DifficultyLevel difficulty);
 float DifficultySpawnMultiplier(DifficultyLevel difficulty);
 float DifficultySpeedMultiplier(DifficultyLevel difficulty);
 int DifficultyScoreMultiplier(DifficultyLevel difficulty);
+std::vector<int> AddScoreToLeaderboard(std::vector<int> leaderboard, int score, std::size_t limit = 5);

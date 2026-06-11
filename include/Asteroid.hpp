@@ -5,7 +5,8 @@
 enum class AsteroidType {
     Rock,
     Fast,
-    Heavy
+    Heavy,
+    Boss
 };
 
 class Asteroid {

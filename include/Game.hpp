@@ -7,6 +7,7 @@
 #include "Player.hpp"
 #include "Starfield.hpp"
 #include "Storage.hpp"
+#include "WaveSystem.hpp"
 #include <random>
 #include <string>
 #include <vector>
@@ -48,13 +49,22 @@ private:
     float pickupSpawnTimer_ = 0.0f;
     float difficulty_ = 1.0f;
     float shotCooldown_ = 0.0f;
+    int currentWave_ = 1;
+    int bossWaveSpawned_ = 0;
     bool exitRequested_ = false;
 
 #ifndef UNIT_TEST
+    bool spritesheetReady_ = false;
+    Texture2D spritesheet_{};
     bool audioReady_ = false;
+    bool externalShotReady_ = false;
+    bool externalPickupReady_ = false;
+    bool externalExplosionReady_ = false;
+    bool externalMusicReady_ = false;
     Sound shotSound_{};
     Sound pickupSound_{};
     Sound explosionSound_{};
+    Music backgroundMusic_{};
     AudioStream musicStream_{};
     float musicPhase_ = 0.0f;
     std::vector<short> musicBuffer_;
@@ -69,6 +79,7 @@ private:
     void FinishGame();
 
     void SpawnAsteroid();
+    void SpawnBoss();
     void SpawnPickup();
     void FireBullet();
     void SpawnExplosion(Vector2 position, Color color, int count);
@@ -92,6 +103,10 @@ private:
     int RandomInt(int minValue, int maxValue);
 
 #ifndef UNIT_TEST
+    void InitializeAssets();
+    void ShutdownAssets();
+    void DrawSpriteCell(int cellX, int cellY, Vector2 center, float size, float rotation = 0.0f) const;
+    bool HasLivingBoss() const;
     void InitializeAudio();
     void ShutdownAudio();
     void PlayShotSound();

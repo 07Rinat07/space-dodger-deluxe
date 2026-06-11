@@ -1,8 +1,10 @@
 #include "Storage.hpp"
 #include "Config.hpp"
 #include <algorithm>
+#include <functional>
 #include <fstream>
 #include <sstream>
+#include <vector>
 
 namespace {
 int ClampHighScore(int score) {
@@ -94,6 +96,43 @@ std::string ExtractString(const std::string& json, const std::string& key, const
 
     return json.substr(quoteStart + 1, quoteEnd - quoteStart - 1);
 }
+
+std::vector<int> ExtractLeaderboard(const std::string& json) {
+    const std::string marker = "\"leaderboard\"";
+    const std::size_t keyPosition = json.find(marker);
+    if (keyPosition == std::string::npos) {
+        return {};
+    }
+
+    const std::size_t openBracket = json.find('[', keyPosition + marker.size());
+    const std::size_t closeBracket = json.find(']', openBracket);
+    if (openBracket == std::string::npos || closeBracket == std::string::npos) {
+        return {};
+    }
+
+    std::vector<int> scores;
+    std::size_t cursor = openBracket + 1;
+    while (cursor < closeBracket) {
+        const std::size_t start = json.find_first_of("-0123456789", cursor);
+        if (start == std::string::npos || start >= closeBracket) {
+            break;
+        }
+
+        try {
+            scores.push_back(ClampHighScore(std::stoi(json.substr(start))));
+        } catch (...) {
+            break;
+        }
+
+        cursor = json.find_first_of(",", start);
+        if (cursor == std::string::npos || cursor >= closeBracket) {
+            break;
+        }
+        ++cursor;
+    }
+
+    return AddScoreToLeaderboard(scores, 0);
+}
 }
 
 std::string DifficultyToString(DifficultyLevel difficulty) {
@@ -166,6 +205,25 @@ int DifficultyScoreMultiplier(DifficultyLevel difficulty) {
     }
 }
 
+std::vector<int> AddScoreToLeaderboard(std::vector<int> leaderboard, int score, std::size_t limit) {
+    if (score > 0) {
+        leaderboard.push_back(score);
+    }
+
+    std::sort(leaderboard.begin(), leaderboard.end(), std::greater<int>());
+    leaderboard.erase(
+        std::remove_if(leaderboard.begin(), leaderboard.end(), [](int value) {
+            return value <= 0;
+        }),
+        leaderboard.end()
+    );
+
+    if (leaderboard.size() > limit) {
+        leaderboard.resize(limit);
+    }
+    return leaderboard;
+}
+
 SaveData Storage::Load(const std::string& fileName) {
     SaveData data{};
     const std::string content = ReadTextFile(fileName);
@@ -176,6 +234,7 @@ SaveData Storage::Load(const std::string& fileName) {
     if (content.find('{') == std::string::npos) {
         try {
             data.highScore = ClampHighScore(std::stoi(content));
+            data.leaderboard = AddScoreToLeaderboard({}, data.highScore);
         } catch (...) {
             data.highScore = 0;
         }
@@ -186,6 +245,10 @@ SaveData Storage::Load(const std::string& fileName) {
     data.difficulty = DifficultyFromString(ExtractString(content, "difficulty", "normal"));
     data.soundEnabled = ExtractBool(content, "soundEnabled", true);
     data.musicEnabled = ExtractBool(content, "musicEnabled", true);
+    data.leaderboard = ExtractLeaderboard(content);
+    if (data.leaderboard.empty() && data.highScore > 0) {
+        data.leaderboard = AddScoreToLeaderboard({}, data.highScore);
+    }
     return data;
 }
 
@@ -199,7 +262,16 @@ void Storage::Save(const SaveData& data, const std::string& fileName) {
     file << "  \"highScore\": " << ClampHighScore(data.highScore) << ",\n";
     file << "  \"difficulty\": \"" << DifficultyToString(data.difficulty) << "\",\n";
     file << "  \"soundEnabled\": " << (data.soundEnabled ? "true" : "false") << ",\n";
-    file << "  \"musicEnabled\": " << (data.musicEnabled ? "true" : "false") << "\n";
+    file << "  \"musicEnabled\": " << (data.musicEnabled ? "true" : "false") << ",\n";
+    file << "  \"leaderboard\": [";
+    const std::vector<int> leaderboard = AddScoreToLeaderboard(data.leaderboard, 0);
+    for (std::size_t i = 0; i < leaderboard.size(); ++i) {
+        if (i > 0) {
+            file << ", ";
+        }
+        file << leaderboard[i];
+    }
+    file << "]\n";
     file << "}\n";
 }
 

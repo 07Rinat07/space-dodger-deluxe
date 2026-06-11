@@ -5,6 +5,7 @@
 #include "../include/Pickup.hpp"
 #include "../include/Storage.hpp"
 #include "../include/Utils.hpp"
+#include "../include/WaveSystem.hpp"
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -82,6 +83,7 @@ void TestStorageJsonSettingsRoundTrip() {
     expected.difficulty = DifficultyLevel::Hard;
     expected.soundEnabled = false;
     expected.musicEnabled = true;
+    expected.leaderboard = {777, 450, 120};
 
     Storage::Save(expected, tempPath.string());
     const SaveData actual = Storage::Load(tempPath.string());
@@ -90,6 +92,10 @@ void TestStorageJsonSettingsRoundTrip() {
     ASSERT_TRUE(actual.difficulty == DifficultyLevel::Hard);
     ASSERT_TRUE(!actual.soundEnabled);
     ASSERT_TRUE(actual.musicEnabled);
+    ASSERT_EQ(actual.leaderboard.size(), static_cast<std::size_t>(3));
+    ASSERT_EQ(actual.leaderboard[0], 777);
+    ASSERT_EQ(actual.leaderboard[1], 450);
+    ASSERT_EQ(actual.leaderboard[2], 120);
 
     std::filesystem::remove(tempPath);
 }
@@ -140,6 +146,32 @@ void TestDifficultyHelpers() {
     ASSERT_TRUE(DifficultyScoreMultiplier(DifficultyLevel::Hard) > DifficultyScoreMultiplier(DifficultyLevel::Easy));
 }
 
+void TestLeaderboardKeepsBestScores() {
+    std::vector<int> leaderboard = {100, 400, 50};
+    leaderboard = AddScoreToLeaderboard(leaderboard, 250, 3);
+
+    ASSERT_EQ(leaderboard.size(), static_cast<std::size_t>(3));
+    ASSERT_EQ(leaderboard[0], 400);
+    ASSERT_EQ(leaderboard[1], 250);
+    ASSERT_EQ(leaderboard[2], 100);
+
+    leaderboard = AddScoreToLeaderboard(leaderboard, -20, 3);
+    ASSERT_EQ(leaderboard.size(), static_cast<std::size_t>(3));
+}
+
+void TestWaveSystem() {
+    const WaveInfo firstWave = ComputeWaveInfo(0.0f);
+    const WaveInfo thirdWave = ComputeWaveInfo(60.0f);
+    const WaveInfo lateWave = ComputeWaveInfo(180.0f);
+
+    ASSERT_EQ(firstWave.number, 1);
+    ASSERT_TRUE(!firstWave.bossWave);
+    ASSERT_EQ(thirdWave.number, 3);
+    ASSERT_TRUE(thirdWave.bossWave);
+    ASSERT_TRUE(lateWave.spawnDelayMultiplier < firstWave.spawnDelayMultiplier);
+    ASSERT_TRUE(lateWave.enemySpeedMultiplier > firstWave.enemySpeedMultiplier);
+}
+
 void TestAsteroidMovementAndBounds() {
     Asteroid asteroid({10.0f, 20.0f}, {30.0f, 40.0f}, 12.0f, 1.5f);
 
@@ -164,6 +196,7 @@ void TestAsteroidMovementAndBounds() {
 void TestAsteroidTypesAndDamage() {
     Asteroid fast({0.0f, 0.0f}, {0.0f, 0.0f}, 16.0f, 0.0f, AsteroidType::Fast);
     Asteroid heavy({0.0f, 0.0f}, {0.0f, 0.0f}, 32.0f, 0.0f, AsteroidType::Heavy);
+    Asteroid boss({0.0f, 0.0f}, {0.0f, 0.0f}, 74.0f, 0.0f, AsteroidType::Boss);
 
     ASSERT_TRUE(fast.GetType() == AsteroidType::Fast);
     ASSERT_EQ(fast.GetHealth(), 1);
@@ -175,6 +208,10 @@ void TestAsteroidTypesAndDamage() {
     ASSERT_TRUE(!heavy.TakeDamage(1));
     ASSERT_EQ(heavy.GetHealth(), 1);
     ASSERT_TRUE(heavy.TakeDamage(1));
+
+    ASSERT_TRUE(boss.GetType() == AsteroidType::Boss);
+    ASSERT_TRUE(boss.GetHealth() > heavy.GetHealth());
+    ASSERT_TRUE(boss.GetScoreValue() > heavy.GetScoreValue());
 }
 
 void TestBulletMovementAndBounds() {
@@ -254,6 +291,8 @@ int main() {
     TestStorageIgnoresInvalidScores();
     TestStorageMissingFileReturnsZero();
     TestDifficultyHelpers();
+    TestLeaderboardKeepsBestScores();
+    TestWaveSystem();
     TestAsteroidMovementAndBounds();
     TestAsteroidTypesAndDamage();
     TestBulletMovementAndBounds();

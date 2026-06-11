@@ -29,6 +29,18 @@ Sound CreateTone(float frequency, float duration, float volume) {
     wave.data = samples.data();
     return LoadSoundFromWave(wave);
 }
+
+const char* DifficultyDisplayName(DifficultyLevel difficulty) {
+    switch (difficulty) {
+        case DifficultyLevel::Easy:
+            return "easy";
+        case DifficultyLevel::Hard:
+            return "hard";
+        case DifficultyLevel::Normal:
+        default:
+            return "normal";
+    }
+}
 }
 #endif
 
@@ -40,6 +52,7 @@ Game::Game()
     saveData_ = Storage::Load();
     highScore_ = saveData_.highScore;
 #ifndef UNIT_TEST
+    InitializeAssets();
     InitializeAudio();
 #endif
 }
@@ -47,6 +60,7 @@ Game::Game()
 Game::~Game() {
 #ifndef UNIT_TEST
     ShutdownAudio();
+    ShutdownAssets();
 #endif
     if (IsWindowReady()) {
         CloseWindow();
@@ -168,6 +182,8 @@ void Game::StartNewGame() {
     asteroidSpawnTimer_ = 0.0f;
     pickupSpawnTimer_ = 3.0f;
     shotCooldown_ = 0.0f;
+    currentWave_ = 1;
+    bossWaveSpawned_ = 0;
 }
 
 void Game::TogglePause() {
@@ -184,9 +200,10 @@ void Game::FinishGame() {
 
     if (score_ > highScore_) {
         highScore_ = score_;
-        saveData_.highScore = highScore_;
-        Storage::Save(saveData_);
     }
+    saveData_.highScore = highScore_;
+    saveData_.leaderboard = AddScoreToLeaderboard(saveData_.leaderboard, score_);
+    Storage::Save(saveData_);
 #ifndef UNIT_TEST
     PlayExplosionSound();
 #endif
@@ -206,6 +223,16 @@ void Game::SpawnAsteroid() {
     const float rotationSpeed = RandomFloat(-2.5f, 2.5f);
 
     asteroids_.emplace_back(Vector2{x, y}, Vector2{horizontalDrift, verticalSpeed}, radius, rotationSpeed, type);
+}
+
+void Game::SpawnBoss() {
+    const float radius = 74.0f;
+    const float x = RandomFloat(radius + 20.0f, cfg::ScreenWidth - radius - 20.0f);
+    const float y = -radius;
+    const float horizontalDrift = RandomFloat(-90.0f, 90.0f);
+    const float verticalSpeed = (80.0f + currentWave_ * 4.0f) * DifficultySpeedMultiplier(saveData_.difficulty);
+
+    asteroids_.emplace_back(Vector2{x, y}, Vector2{horizontalDrift, verticalSpeed}, radius, 0.45f, AsteroidType::Boss);
 }
 
 void Game::SpawnPickup() {
@@ -247,7 +274,9 @@ void Game::SaveSettings() {
 
 void Game::UpdatePlaying(float dt) {
     survivedTime_ += dt;
-    difficulty_ = 1.0f + survivedTime_ / 45.0f;
+    const WaveInfo wave = ComputeWaveInfo(survivedTime_);
+    currentWave_ = wave.number;
+    difficulty_ = (1.0f + survivedTime_ / 45.0f) * wave.enemySpeedMultiplier;
 
     // Score consists of two parts:
     // 1) survival points, calculated from total survived time;
@@ -257,10 +286,16 @@ void Game::UpdatePlaying(float dt) {
     player_.Update(dt);
     shotCooldown_ = std::max(0.0f, shotCooldown_ - dt);
 
+    if (wave.bossWave && bossWaveSpawned_ != wave.number && !HasLivingBoss()) {
+        SpawnBoss();
+        bossWaveSpawned_ = wave.number;
+    }
+
     asteroidSpawnTimer_ -= dt;
     if (asteroidSpawnTimer_ <= 0.0f) {
         SpawnAsteroid();
-        const float dynamicDelay = std::max(cfg::MinSpawnDelay, cfg::InitialSpawnDelay - survivedTime_ * 0.008f) * DifficultySpawnMultiplier(saveData_.difficulty);
+        const float dynamicDelay = std::max(cfg::MinSpawnDelay, cfg::InitialSpawnDelay - survivedTime_ * 0.008f) *
+            DifficultySpawnMultiplier(saveData_.difficulty) * wave.spawnDelayMultiplier;
         asteroidSpawnTimer_ = dynamicDelay;
     }
 
@@ -306,9 +341,20 @@ void Game::UpdateMusic() {
     }
 
     if (!saveData_.musicEnabled) {
+        if (externalMusicReady_ && IsMusicStreamPlaying(backgroundMusic_)) {
+            StopMusicStream(backgroundMusic_);
+        }
         if (IsAudioStreamPlaying(musicStream_)) {
             StopAudioStream(musicStream_);
         }
+        return;
+    }
+
+    if (externalMusicReady_) {
+        if (!IsMusicStreamPlaying(backgroundMusic_)) {
+            PlayMusicStream(backgroundMusic_);
+        }
+        UpdateMusicStream(backgroundMusic_);
         return;
     }
 
@@ -450,22 +496,53 @@ void Game::DrawSettings() const {
 
 void Game::DrawPlaying() const {
     for (const Pickup& pickup : pickups_) {
-        pickup.Draw();
+        if (spritesheetReady_) {
+            const int cellY = pickup.GetType() == PickupType::Score ? 1 : 1;
+            const int cellX = pickup.GetType() == PickupType::Score ? 0 : 1;
+            DrawSpriteCell(cellX, cellY, pickup.GetPosition(), pickup.GetRadius() * 3.0f);
+        } else {
+            pickup.Draw();
+        }
     }
 
     for (const Asteroid& asteroid : asteroids_) {
-        asteroid.Draw();
+        if (spritesheetReady_) {
+            int cellX = 1;
+            int cellY = 0;
+            if (asteroid.GetType() == AsteroidType::Fast) {
+                cellX = 2;
+            } else if (asteroid.GetType() == AsteroidType::Heavy) {
+                cellX = 3;
+            } else if (asteroid.GetType() == AsteroidType::Boss) {
+                cellX = 3;
+                cellY = 1;
+            }
+            DrawSpriteCell(cellX, cellY, asteroid.GetPosition(), asteroid.GetRadius() * 2.25f);
+        } else {
+            asteroid.Draw();
+        }
     }
 
     for (const Bullet& bullet : bullets_) {
-        bullet.Draw();
+        if (spritesheetReady_) {
+            DrawSpriteCell(2, 1, bullet.GetPosition(), bullet.GetRadius() * 4.0f);
+        } else {
+            bullet.Draw();
+        }
     }
 
     for (const Particle& particle : particles_) {
         particle.Draw();
     }
 
-    player_.Draw();
+    if (spritesheetReady_) {
+        DrawSpriteCell(0, 0, player_.GetPosition(), player_.GetRadius() * 3.2f);
+        if (player_.HasShield()) {
+            DrawCircleLines(static_cast<int>(player_.GetPosition().x), static_cast<int>(player_.GetPosition().y), player_.GetRadius() + 22.0f, SKYBLUE);
+        }
+    } else {
+        player_.Draw();
+    }
     DrawHud();
 }
 
@@ -488,8 +565,18 @@ void Game::DrawGameOver() const {
     highText << "High score: " << highScore_;
     DrawCenteredText(highText.str(), 350, 28, GOLD);
 
-    DrawCenteredText("R / ENTER / SPACE - restart", 430, 28, GREEN);
-    DrawCenteredText("ESC - menu", 470, 24, LIGHTGRAY);
+    int y = 395;
+    DrawCenteredText("Leaderboard", y, 22, SKYBLUE);
+    y += 30;
+    for (std::size_t i = 0; i < saveData_.leaderboard.size() && i < 5; ++i) {
+        std::ostringstream row;
+        row << i + 1 << ". " << saveData_.leaderboard[i];
+        DrawCenteredText(row.str(), y, 20, LIGHTGRAY);
+        y += 24;
+    }
+
+    DrawCenteredText("R / ENTER / SPACE - restart", 575, 26, GREEN);
+    DrawCenteredText("ESC - menu", 615, 22, LIGHTGRAY);
 }
 
 void Game::DrawHud() const {
@@ -499,12 +586,13 @@ void Game::DrawHud() const {
     DrawText(TextFormat("Score: %d", score_), 28, 24, 22, RAYWHITE);
     DrawText(TextFormat("Best:  %d", highScore_), 28, 52, 20, GOLD);
     DrawText(TextFormat("Time:  %.1f", survivedTime_), 150, 52, 20, LIGHTGRAY);
+    DrawText(TextFormat("Wave:  %d", currentWave_), 150, 76, 18, SKYBLUE);
 
     if (player_.HasShield()) {
         DrawText("SHIELD ACTIVE", cfg::ScreenWidth - 215, 24, 22, SKYBLUE);
     }
 
-    DrawText(TextFormat("Difficulty: %s", DifficultyToString(saveData_.difficulty).c_str()), cfg::ScreenWidth - 210, 56, 18, LIGHTGRAY);
+    DrawText(TextFormat("Difficulty: %s", DifficultyDisplayName(saveData_.difficulty)), cfg::ScreenWidth - 210, 56, 18, LIGHTGRAY);
 }
 
 void Game::DrawCenteredText(const std::string& text, int y, int fontSize, Color color) const {
@@ -523,6 +611,48 @@ int Game::RandomInt(int minValue, int maxValue) {
 }
 
 #ifndef UNIT_TEST
+void Game::InitializeAssets() {
+    if (FileExists("assets/textures/spritesheet.png")) {
+        spritesheet_ = LoadTexture("assets/textures/spritesheet.png");
+        spritesheetReady_ = spritesheet_.id != 0;
+    }
+}
+
+void Game::ShutdownAssets() {
+    if (spritesheetReady_) {
+        UnloadTexture(spritesheet_);
+        spritesheetReady_ = false;
+    }
+}
+
+void Game::DrawSpriteCell(int cellX, int cellY, Vector2 center, float size, float rotation) const {
+    if (!spritesheetReady_) {
+        return;
+    }
+
+    const float cellWidth = static_cast<float>(spritesheet_.width) / 4.0f;
+    const float cellHeight = static_cast<float>(spritesheet_.height) / 2.0f;
+    const Rectangle source{
+        static_cast<float>(cellX) * cellWidth,
+        static_cast<float>(cellY) * cellHeight,
+        cellWidth,
+        cellHeight
+    };
+    const Rectangle destination{
+        center.x,
+        center.y,
+        size,
+        size
+    };
+    DrawTexturePro(spritesheet_, source, destination, {size / 2.0f, size / 2.0f}, rotation, WHITE);
+}
+
+bool Game::HasLivingBoss() const {
+    return std::any_of(asteroids_.begin(), asteroids_.end(), [](const Asteroid& asteroid) {
+        return asteroid.GetType() == AsteroidType::Boss;
+    });
+}
+
 void Game::InitializeAudio() {
     InitAudioDevice();
     audioReady_ = IsAudioDeviceReady();
@@ -530,9 +660,35 @@ void Game::InitializeAudio() {
         return;
     }
 
-    shotSound_ = CreateTone(880.0f, 0.08f, 0.28f);
-    pickupSound_ = CreateTone(660.0f, 0.14f, 0.24f);
-    explosionSound_ = CreateTone(120.0f, 0.22f, 0.34f);
+    if (FileExists("assets/sounds/shot.wav")) {
+        shotSound_ = LoadSound("assets/sounds/shot.wav");
+        externalShotReady_ = shotSound_.frameCount > 0;
+    }
+    if (!externalShotReady_) {
+        shotSound_ = CreateTone(880.0f, 0.08f, 0.28f);
+    }
+
+    if (FileExists("assets/sounds/pickup.wav")) {
+        pickupSound_ = LoadSound("assets/sounds/pickup.wav");
+        externalPickupReady_ = pickupSound_.frameCount > 0;
+    }
+    if (!externalPickupReady_) {
+        pickupSound_ = CreateTone(660.0f, 0.14f, 0.24f);
+    }
+
+    if (FileExists("assets/sounds/explosion.wav")) {
+        explosionSound_ = LoadSound("assets/sounds/explosion.wav");
+        externalExplosionReady_ = explosionSound_.frameCount > 0;
+    }
+    if (!externalExplosionReady_) {
+        explosionSound_ = CreateTone(120.0f, 0.22f, 0.34f);
+    }
+
+    if (FileExists("assets/music/theme.wav")) {
+        backgroundMusic_ = LoadMusicStream("assets/music/theme.wav");
+        externalMusicReady_ = backgroundMusic_.stream.buffer != nullptr;
+    }
+
     SetAudioStreamBufferSizeDefault(512);
     musicStream_ = LoadAudioStream(22050, 16, 1);
     musicBuffer_.reserve(512);
@@ -546,6 +702,9 @@ void Game::ShutdownAudio() {
     UnloadSound(shotSound_);
     UnloadSound(pickupSound_);
     UnloadSound(explosionSound_);
+    if (externalMusicReady_) {
+        UnloadMusicStream(backgroundMusic_);
+    }
     UnloadAudioStream(musicStream_);
     CloseAudioDevice();
     audioReady_ = false;
