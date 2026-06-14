@@ -25,6 +25,8 @@ public:
     int GetHealth() const;
     int GetMaxHealth() const;
     int GetScoreValue() const;
+    bool HasNearMissAwarded() const;
+    void MarkNearMissAwarded();
     bool IsOffScreen() const;
 
 private:
@@ -36,4 +38,5 @@ private:
     AsteroidType type_{};
     int health_{};
     int maxHealth_{};
+    bool nearMissAwarded_ = false;
 };

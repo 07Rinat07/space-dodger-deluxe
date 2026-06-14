@@ -59,6 +59,14 @@ ProjectilePattern EnemyProjectile::GetPattern() const {
     return pattern_;
 }
 
+bool EnemyProjectile::HasNearMissAwarded() const {
+    return nearMissAwarded_;
+}
+
+void EnemyProjectile::MarkNearMissAwarded() {
+    nearMissAwarded_ = true;
+}
+
 bool EnemyProjectile::IsOffScreen() const {
     return position_.y - radius_ > cfg::ScreenHeight + 40.0f ||
            position_.x + radius_ < -60.0f ||

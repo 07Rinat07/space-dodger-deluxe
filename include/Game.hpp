@@ -56,6 +56,11 @@ private:
     SaveData saveData_;
     int score_ = 0;
     int bonusScore_ = 0;
+    float scoreMultiplier_ = 1.0f;
+    float comboTimer_ = 0.0f;
+    int nearMissCount_ = 0;
+    int lives_ = 1;
+    int maxLives_ = 1;
     int highScore_ = 0;
     float survivedTime_ = 0.0f;
     float asteroidSpawnTimer_ = 0.0f;
@@ -63,18 +68,33 @@ private:
     float difficulty_ = 1.0f;
     float shotCooldown_ = 0.0f;
     float bossAttackTimer_ = 0.0f;
+    float rapidFireTimer_ = 0.0f;
+    float spreadShotTimer_ = 0.0f;
+    float hitInvulnerability_ = 0.0f;
+    float waveBannerTimer_ = 0.0f;
+    float damageFlashTimer_ = 0.0f;
     int currentWave_ = 1;
+    int lastAnnouncedWave_ = 0;
     int bossWaveSpawned_ = 0;
     bool exitRequested_ = false;
     bool scoreSubmitted_ = true;
     std::string playerName_ = "PLAYER";
+    std::string waveBannerText_;
     struct ExplosionVisual {
         Vector2 position{};
         float age = 0.0f;
         float duration = 0.42f;
         float size = 120.0f;
     };
+    struct FloatingText {
+        Vector2 position{};
+        std::string text;
+        Color color{};
+        float age = 0.0f;
+        float duration = 0.85f;
+    };
     std::vector<ExplosionVisual> explosionVisuals_;
+    std::vector<FloatingText> floatingTexts_;
 
 #ifndef UNIT_TEST
     bool artReady_ = false;
@@ -127,11 +147,15 @@ private:
     void SpawnExplosion(Vector2 position, Color color, int count);
     void SaveSettings();
     void SubmitScore();
+    void AwardBonus(int baseScore, Vector2 position, const std::string& label, Color color);
+    void HandlePlayerHit(Vector2 position);
 
     void UpdatePlaying(float dt);
     void UpdateParticles(float dt);
+    void UpdateFloatingTexts(float dt);
     void UpdateMusic();
     void CheckCollisions();
+    void CheckNearMisses();
     void RemoveDeadObjects();
 
     void DrawMenu() const;
@@ -142,6 +166,9 @@ private:
     void DrawNameEntry() const;
     void DrawLeaderboard() const;
     void DrawHud() const;
+    void DrawBossHealth() const;
+    void DrawFloatingTexts() const;
+    void DrawWaveBanner() const;
     void DrawCenteredText(const std::string& text, int y, int fontSize, Color color) const;
 
     float RandomFloat(float minValue, float maxValue);

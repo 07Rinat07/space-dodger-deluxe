@@ -2,10 +2,14 @@
 #include "Config.hpp"
 
 Bullet::Bullet(Vector2 position, float speed)
-    : position_(position), speed_(speed), radius_(cfg::BulletRadius) {}
+    : Bullet(position, Vector2{0.0f, -speed}) {}
+
+Bullet::Bullet(Vector2 position, Vector2 velocity)
+    : position_(position), velocity_(velocity), radius_(cfg::BulletRadius) {}
 
 void Bullet::Update(float dt) {
-    position_.y -= speed_ * dt;
+    position_.x += velocity_.x * dt;
+    position_.y += velocity_.y * dt;
 }
 
 void Bullet::Draw() const {
@@ -24,5 +28,7 @@ float Bullet::GetRadius() const {
 }
 
 bool Bullet::IsOffScreen() const {
-    return position_.y + radius_ < -20.0f;
+    return position_.y + radius_ < -20.0f ||
+           position_.x + radius_ < -40.0f ||
+           position_.x - radius_ > cfg::ScreenWidth + 40.0f;
 }

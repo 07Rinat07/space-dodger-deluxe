@@ -207,6 +207,9 @@ void TestAsteroidTypesAndDamage() {
     Asteroid carrier({0.0f, 0.0f}, {0.0f, 0.0f}, 86.0f, 0.0f, AsteroidType::BossCarrier);
 
     ASSERT_TRUE(fast.GetType() == AsteroidType::Fast);
+    ASSERT_TRUE(!fast.HasNearMissAwarded());
+    fast.MarkNearMissAwarded();
+    ASSERT_TRUE(fast.HasNearMissAwarded());
     ASSERT_EQ(fast.GetHealth(), 1);
     ASSERT_TRUE(fast.GetScoreValue() > 0);
     ASSERT_TRUE(fast.TakeDamage(1));
@@ -232,6 +235,9 @@ void TestEnemyProjectileMovementAndBounds() {
     ASSERT_NEAR(projectile.GetPosition().x, 40.0f, 0.001f);
     ASSERT_NEAR(projectile.GetPosition().y, 90.0f, 0.001f);
     ASSERT_NEAR(projectile.GetRadius(), 9.0f, 0.001f);
+    ASSERT_TRUE(!projectile.HasNearMissAwarded());
+    projectile.MarkNearMissAwarded();
+    ASSERT_TRUE(projectile.HasNearMissAwarded());
     ASSERT_TRUE(!projectile.IsOffScreen());
 
     projectile.Update(6.0f);
@@ -269,11 +275,18 @@ void TestBulletMovementAndBounds() {
 
     bullet.Update(1.0f);
     ASSERT_TRUE(bullet.IsOffScreen());
+
+    Bullet diagonal({40.0f, 100.0f}, Vector2{20.0f, -160.0f});
+    diagonal.Update(0.5f);
+    ASSERT_NEAR(diagonal.GetPosition().x, 50.0f, 0.001f);
+    ASSERT_NEAR(diagonal.GetPosition().y, 20.0f, 0.001f);
 }
 
 void TestPickupMovementTypeAndBounds() {
     Pickup scorePickup({100.0f, 50.0f}, PickupType::Score);
     Pickup shieldPickup({120.0f, 60.0f}, PickupType::Shield);
+    Pickup rapidPickup({140.0f, 60.0f}, PickupType::RapidFire);
+    Pickup spreadPickup({160.0f, 60.0f}, PickupType::SpreadShot);
 
     scorePickup.Update(2.0f);
 
@@ -282,6 +295,8 @@ void TestPickupMovementTypeAndBounds() {
     ASSERT_EQ(scorePickup.GetRadius(), 16.0f);
     ASSERT_TRUE(scorePickup.GetType() == PickupType::Score);
     ASSERT_TRUE(shieldPickup.GetType() == PickupType::Shield);
+    ASSERT_TRUE(rapidPickup.GetType() == PickupType::RapidFire);
+    ASSERT_TRUE(spreadPickup.GetType() == PickupType::SpreadShot);
     ASSERT_TRUE(!scorePickup.IsOffScreen());
 
     Pickup offscreenPickup({100.0f, 760.0f}, PickupType::Score);

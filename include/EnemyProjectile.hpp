@@ -20,6 +20,8 @@ public:
     Vector2 GetPosition() const;
     float GetRadius() const;
     ProjectilePattern GetPattern() const;
+    bool HasNearMissAwarded() const;
+    void MarkNearMissAwarded();
     bool IsOffScreen() const;
 
 private:
@@ -31,4 +33,5 @@ private:
     float age_ = 0.0f;
     float amplitude_ = 0.0f;
     float frequency_ = 1.0f;
+    bool nearMissAwarded_ = false;
 };

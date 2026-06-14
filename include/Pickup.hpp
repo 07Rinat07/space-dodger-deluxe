@@ -6,7 +6,9 @@
 // Score adds points, Shield protects the player from one collision window.
 enum class PickupType {
     Score,
-    Shield
+    Shield,
+    RapidFire,
+    SpreadShot
 };
 
 class Pickup {

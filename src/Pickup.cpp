@@ -14,14 +14,27 @@ void Pickup::Draw() const {
 #ifndef UNIT_TEST
     const float animatedRadius = radius_ + std::sin(pulse_) * 3.0f;
 
-    if (type_ == PickupType::Score) {
-        DrawPoly(position_, 5, animatedRadius, 18.0f, GOLD);
-        DrawPolyLines(position_, 5, animatedRadius + 2.0f, 18.0f, YELLOW);
-        DrawText("+", static_cast<int>(position_.x - 7), static_cast<int>(position_.y - 12), 24, DARKBROWN);
-    } else {
-        DrawCircleV(position_, animatedRadius, Fade(BLUE, 0.75f));
-        DrawCircleLines(static_cast<int>(position_.x), static_cast<int>(position_.y), animatedRadius + 3.0f, SKYBLUE);
-        DrawText("S", static_cast<int>(position_.x - 7), static_cast<int>(position_.y - 12), 24, RAYWHITE);
+    switch (type_) {
+        case PickupType::Score:
+            DrawPoly(position_, 5, animatedRadius, 18.0f, GOLD);
+            DrawPolyLines(position_, 5, animatedRadius + 2.0f, 18.0f, YELLOW);
+            DrawText("+", static_cast<int>(position_.x - 7), static_cast<int>(position_.y - 12), 24, DARKBROWN);
+            break;
+        case PickupType::Shield:
+            DrawCircleV(position_, animatedRadius, Fade(BLUE, 0.75f));
+            DrawCircleLines(static_cast<int>(position_.x), static_cast<int>(position_.y), animatedRadius + 3.0f, SKYBLUE);
+            DrawText("S", static_cast<int>(position_.x - 7), static_cast<int>(position_.y - 12), 24, RAYWHITE);
+            break;
+        case PickupType::RapidFire:
+            DrawPoly(position_, 6, animatedRadius, 30.0f, LIME);
+            DrawPolyLines(position_, 6, animatedRadius + 2.0f, 30.0f, GREEN);
+            DrawText("R", static_cast<int>(position_.x - 7), static_cast<int>(position_.y - 12), 24, DARKGREEN);
+            break;
+        case PickupType::SpreadShot:
+            DrawPoly(position_, 3, animatedRadius + 4.0f, 90.0f, VIOLET);
+            DrawPolyLines(position_, 3, animatedRadius + 6.0f, 90.0f, PURPLE);
+            DrawText("W", static_cast<int>(position_.x - 9), static_cast<int>(position_.y - 11), 22, RAYWHITE);
+            break;
     }
 #endif
 }

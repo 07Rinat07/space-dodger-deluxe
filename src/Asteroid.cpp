@@ -109,6 +109,14 @@ int Asteroid::GetScoreValue() const {
     }
 }
 
+bool Asteroid::HasNearMissAwarded() const {
+    return nearMissAwarded_;
+}
+
+void Asteroid::MarkNearMissAwarded() {
+    nearMissAwarded_ = true;
+}
+
 bool Asteroid::IsOffScreen() const {
     return position_.y - radius_ > cfg::ScreenHeight + 50.0f ||
            position_.x < -100.0f ||

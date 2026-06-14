@@ -41,6 +41,24 @@ const char* DifficultyDisplayName(DifficultyLevel difficulty) {
             return "normal";
     }
 }
+
+int StartingLives(DifficultyLevel difficulty) {
+    switch (difficulty) {
+        case DifficultyLevel::Easy:
+            return 3;
+        case DifficultyLevel::Hard:
+            return 1;
+        case DifficultyLevel::Normal:
+        default:
+            return 2;
+    }
+}
+
+bool IsBossType(AsteroidType type) {
+    return type == AsteroidType::BossCruiser ||
+           type == AsteroidType::BossStriker ||
+           type == AsteroidType::BossCarrier;
+}
 }
 #endif
 
@@ -159,6 +177,7 @@ void Game::HandleInput() {
 void Game::Update(float dt) {
     starfield_.Update(dt);
     UpdateParticles(dt);
+    UpdateFloatingTexts(dt);
 #ifndef UNIT_TEST
     UpdateMusic();
 #endif
@@ -213,17 +232,30 @@ void Game::StartNewGame() {
     pickups_.clear();
     particles_.clear();
     explosionVisuals_.clear();
+    floatingTexts_.clear();
     score_ = 0;
     bonusScore_ = 0;
+    scoreMultiplier_ = 1.0f;
+    comboTimer_ = 0.0f;
+    nearMissCount_ = 0;
+    maxLives_ = StartingLives(saveData_.difficulty);
+    lives_ = maxLives_;
     survivedTime_ = 0.0f;
     difficulty_ = 1.0f;
     asteroidSpawnTimer_ = 0.0f;
     pickupSpawnTimer_ = 3.0f;
     shotCooldown_ = 0.0f;
     bossAttackTimer_ = 1.8f;
+    rapidFireTimer_ = 0.0f;
+    spreadShotTimer_ = 0.0f;
+    hitInvulnerability_ = 1.4f;
+    waveBannerTimer_ = 2.0f;
+    damageFlashTimer_ = 0.0f;
     currentWave_ = 1;
+    lastAnnouncedWave_ = 1;
     bossWaveSpawned_ = 0;
     scoreSubmitted_ = true;
+    waveBannerText_ = "WAVE 1";
 }
 
 void Game::TogglePause() {
@@ -337,7 +369,9 @@ void Game::UpdateBossPatterns(float dt) {
 
 void Game::SpawnPickup() {
     const float x = RandomFloat(40.0f, cfg::ScreenWidth - 40.0f);
-    const PickupType type = (RandomInt(0, 100) < 72) ? PickupType::Score : PickupType::Shield;
+    const int roll = RandomInt(0, 100);
+    const PickupType type = roll < 48 ? PickupType::Score :
+        (roll < 70 ? PickupType::Shield : (roll < 86 ? PickupType::RapidFire : PickupType::SpreadShot));
     pickups_.emplace_back(Vector2{x, -25.0f}, type);
 }
 
@@ -347,8 +381,13 @@ void Game::FireBullet() {
     }
 
     const Vector2 playerPosition = player_.GetPosition();
-    bullets_.emplace_back(Vector2{playerPosition.x, playerPosition.y - player_.GetRadius() - 18.0f}, cfg::BulletSpeed);
-    shotCooldown_ = cfg::ShotCooldown;
+    const Vector2 muzzle{playerPosition.x, playerPosition.y - player_.GetRadius() - 18.0f};
+    bullets_.emplace_back(muzzle, cfg::BulletSpeed);
+    if (spreadShotTimer_ > 0.0f) {
+        bullets_.emplace_back(Vector2{muzzle.x - 12.0f, muzzle.y + 4.0f}, Vector2{-210.0f, -cfg::BulletSpeed * 0.92f});
+        bullets_.emplace_back(Vector2{muzzle.x + 12.0f, muzzle.y + 4.0f}, Vector2{210.0f, -cfg::BulletSpeed * 0.92f});
+    }
+    shotCooldown_ = rapidFireTimer_ > 0.0f ? cfg::ShotCooldown * 0.46f : cfg::ShotCooldown;
 #ifndef UNIT_TEST
     PlayShotSound();
 #endif
@@ -383,11 +422,55 @@ void Game::SubmitScore() {
     state_ = GameState::GameOver;
 }
 
+void Game::AwardBonus(int baseScore, Vector2 position, const std::string& label, Color color) {
+    const int awarded = std::max(1, static_cast<int>(static_cast<float>(baseScore) * scoreMultiplier_));
+    bonusScore_ += awarded;
+    comboTimer_ = 4.0f;
+    scoreMultiplier_ = std::min(5.0f, scoreMultiplier_ + 0.12f);
+
+    std::ostringstream text;
+    text << label << " +" << awarded;
+    if (scoreMultiplier_ > 1.1f) {
+        text << " x" << static_cast<int>(scoreMultiplier_ * 10.0f) / 10.0f;
+    }
+    floatingTexts_.push_back({position, text.str(), color, 0.0f, 0.95f});
+}
+
+void Game::HandlePlayerHit(Vector2 position) {
+    if (hitInvulnerability_ > 0.0f) {
+        return;
+    }
+
+    scoreMultiplier_ = 1.0f;
+    comboTimer_ = 0.0f;
+    damageFlashTimer_ = 0.22f;
+
+    if (lives_ > 1) {
+        --lives_;
+        hitInvulnerability_ = 1.35f;
+        SpawnExplosion(position, RED, 24);
+        floatingTexts_.push_back({player_.GetPosition(), "HIT!", RED, 0.0f, 0.9f});
+#ifndef UNIT_TEST
+        PlayExplosionSound();
+#endif
+        return;
+    }
+
+    lives_ = 0;
+    FinishGame();
+}
+
 void Game::UpdatePlaying(float dt) {
     survivedTime_ += dt;
     const WaveInfo wave = ComputeWaveInfo(survivedTime_);
     currentWave_ = wave.number;
     difficulty_ = (1.0f + survivedTime_ / 45.0f) * wave.enemySpeedMultiplier;
+
+    if (currentWave_ != lastAnnouncedWave_) {
+        lastAnnouncedWave_ = currentWave_;
+        waveBannerTimer_ = wave.bossWave ? 2.4f : 1.45f;
+        waveBannerText_ = wave.bossWave ? "BOSS WAVE" : TextFormat("WAVE %d", currentWave_);
+    }
 
     // Score consists of two parts:
     // 1) survival points, calculated from total survived time;
@@ -396,6 +479,17 @@ void Game::UpdatePlaying(float dt) {
 
     player_.Update(dt);
     shotCooldown_ = std::max(0.0f, shotCooldown_ - dt);
+    rapidFireTimer_ = std::max(0.0f, rapidFireTimer_ - dt);
+    spreadShotTimer_ = std::max(0.0f, spreadShotTimer_ - dt);
+    hitInvulnerability_ = std::max(0.0f, hitInvulnerability_ - dt);
+    waveBannerTimer_ = std::max(0.0f, waveBannerTimer_ - dt);
+    damageFlashTimer_ = std::max(0.0f, damageFlashTimer_ - dt);
+    if (comboTimer_ > 0.0f) {
+        comboTimer_ = std::max(0.0f, comboTimer_ - dt);
+        if (comboTimer_ == 0.0f) {
+            scoreMultiplier_ = 1.0f;
+        }
+    }
 
     if (wave.bossWave && bossWaveSpawned_ != wave.number && !HasLivingBoss()) {
         SpawnBoss();
@@ -434,6 +528,7 @@ void Game::UpdatePlaying(float dt) {
     }
 
     CheckCollisions();
+    CheckNearMisses();
     RemoveDeadObjects();
 }
 
@@ -457,6 +552,19 @@ void Game::UpdateParticles(float dt) {
             return explosion.age >= explosion.duration;
         }),
         explosionVisuals_.end()
+    );
+}
+
+void Game::UpdateFloatingTexts(float dt) {
+    for (FloatingText& text : floatingTexts_) {
+        text.age += dt;
+        text.position.y -= 44.0f * dt;
+    }
+    floatingTexts_.erase(
+        std::remove_if(floatingTexts_.begin(), floatingTexts_.end(), [](const FloatingText& text) {
+            return text.age >= text.duration;
+        }),
+        floatingTexts_.end()
     );
 }
 
@@ -524,7 +632,7 @@ void Game::CheckCollisions() {
             if (CirclesCollide(bulletIt->GetPosition(), bulletIt->GetRadius(), asteroidIt->GetPosition(), asteroidIt->GetRadius())) {
                 SpawnExplosion(bulletIt->GetPosition(), ORANGE, 8);
                 if (asteroidIt->TakeDamage(1)) {
-                    bonusScore_ += asteroidIt->GetScoreValue();
+                    AwardBonus(asteroidIt->GetScoreValue(), asteroidIt->GetPosition(), "DESTROY", GOLD);
                     SpawnExplosion(asteroidIt->GetPosition(), GOLD, 18);
                     asteroids_.erase(asteroidIt);
 #ifndef UNIT_TEST
@@ -548,13 +656,15 @@ void Game::CheckCollisions() {
                 // Shield saves the player and destroys the asteroid that caused the collision.
                 player_.ActivateShield(0.0f);
                 SpawnExplosion(asteroidIt->GetPosition(), SKYBLUE, 28);
-                bonusScore_ += 25;
+                AwardBonus(35, asteroidIt->GetPosition(), "SHIELD", SKYBLUE);
                 asteroids_.erase(asteroidIt);
 #ifndef UNIT_TEST
                 PlayExplosionSound();
 #endif
             } else {
-                FinishGame();
+                const Vector2 impact = asteroidIt->GetPosition();
+                asteroids_.erase(asteroidIt);
+                HandlePlayerHit(impact);
             }
             return;
         }
@@ -565,9 +675,12 @@ void Game::CheckCollisions() {
             if (player_.HasShield()) {
                 player_.ActivateShield(0.0f);
                 SpawnExplosion(projectileIt->GetPosition(), SKYBLUE, 14);
+                AwardBonus(20, projectileIt->GetPosition(), "BLOCK", SKYBLUE);
                 enemyProjectiles_.erase(projectileIt);
             } else {
-                FinishGame();
+                const Vector2 impact = projectileIt->GetPosition();
+                enemyProjectiles_.erase(projectileIt);
+                HandlePlayerHit(impact);
             }
             return;
         }
@@ -576,12 +689,25 @@ void Game::CheckCollisions() {
     pickups_.erase(
         std::remove_if(pickups_.begin(), pickups_.end(), [this](const Pickup& pickup) {
             if (CirclesCollide(player_.GetPosition(), player_.GetRadius(), pickup.GetPosition(), pickup.GetRadius())) {
-                if (pickup.GetType() == PickupType::Score) {
-                    bonusScore_ += 100;
-                    SpawnExplosion(pickup.GetPosition(), GOLD, 16);
-                } else {
-                    player_.ActivateShield(5.0f);
-                    SpawnExplosion(pickup.GetPosition(), BLUE, 22);
+                switch (pickup.GetType()) {
+                    case PickupType::Score:
+                        AwardBonus(100, pickup.GetPosition(), "BONUS", GOLD);
+                        SpawnExplosion(pickup.GetPosition(), GOLD, 16);
+                        break;
+                    case PickupType::Shield:
+                        player_.ActivateShield(5.0f);
+                        SpawnExplosion(pickup.GetPosition(), BLUE, 22);
+                        break;
+                    case PickupType::RapidFire:
+                        rapidFireTimer_ = 8.0f;
+                        AwardBonus(45, pickup.GetPosition(), "RAPID", LIME);
+                        SpawnExplosion(pickup.GetPosition(), LIME, 18);
+                        break;
+                    case PickupType::SpreadShot:
+                        spreadShotTimer_ = 7.0f;
+                        AwardBonus(55, pickup.GetPosition(), "SPREAD", VIOLET);
+                        SpawnExplosion(pickup.GetPosition(), VIOLET, 18);
+                        break;
                 }
 #ifndef UNIT_TEST
                 PlayPickupSound();
@@ -592,6 +718,41 @@ void Game::CheckCollisions() {
         }),
         pickups_.end()
     );
+}
+
+void Game::CheckNearMisses() {
+    const Vector2 playerPosition = player_.GetPosition();
+    const float playerRadius = player_.GetRadius();
+
+    for (Asteroid& asteroid : asteroids_) {
+        if (asteroid.HasNearMissAwarded() || IsBossType(asteroid.GetType())) {
+            continue;
+        }
+
+        const float collisionDistance = playerRadius + asteroid.GetRadius() * 0.82f;
+        const float nearDistance = collisionDistance + 38.0f;
+        const float distance = Distance(playerPosition, asteroid.GetPosition());
+        if (distance > collisionDistance && distance <= nearDistance && asteroid.GetPosition().y < playerPosition.y + 70.0f) {
+            asteroid.MarkNearMissAwarded();
+            ++nearMissCount_;
+            AwardBonus(18, playerPosition, "NEAR MISS", SKYBLUE);
+        }
+    }
+
+    for (EnemyProjectile& projectile : enemyProjectiles_) {
+        if (projectile.HasNearMissAwarded()) {
+            continue;
+        }
+
+        const float collisionDistance = playerRadius + projectile.GetRadius();
+        const float nearDistance = collisionDistance + 32.0f;
+        const float distance = Distance(playerPosition, projectile.GetPosition());
+        if (distance > collisionDistance && distance <= nearDistance) {
+            projectile.MarkNearMissAwarded();
+            ++nearMissCount_;
+            AwardBonus(22, playerPosition, "DODGE", SKYBLUE);
+        }
+    }
 }
 
 void Game::RemoveDeadObjects() {
@@ -627,16 +788,17 @@ void Game::RemoveDeadObjects() {
 void Game::DrawMenu() const {
     DrawRectangle(0, 0, cfg::ScreenWidth, cfg::ScreenHeight, Fade(BLACK, 0.25f));
     DrawCenteredText("SPACE DODGER DELUXE", 150, 46, SKYBLUE);
-    DrawCenteredText("arcade with weapons, enemies and procedural audio", 210, 22, RAYWHITE);
+    DrawCenteredText("dodge close, shoot clean, chain combos", 210, 22, RAYWHITE);
 
     DrawCenteredText("ENTER - start game", 315, 28, GREEN);
     DrawCenteredText("L - leaderboard   S - settings", 350, 24, SKYBLUE);
     DrawCenteredText("WASD / ARROWS - move, SPACE / CTRL - shoot", 390, 24, LIGHTGRAY);
-    DrawCenteredText("P - pause, ESC - menu / exit", 430, 24, LIGHTGRAY);
+    DrawCenteredText("Near misses and kills build score multiplier", 430, 24, GOLD);
+    DrawCenteredText("P - pause, ESC - menu / exit", 470, 22, LIGHTGRAY);
 
     std::ostringstream stream;
     stream << "High score: " << highScore_ << "   Difficulty: " << DifficultyToString(saveData_.difficulty);
-    DrawCenteredText(stream.str(), 510, 24, GOLD);
+    DrawCenteredText(stream.str(), 540, 24, GOLD);
 }
 
 void Game::DrawSettings() const {
@@ -654,7 +816,7 @@ void Game::DrawSettings() const {
 
 void Game::DrawPlaying() const {
     for (const Pickup& pickup : pickups_) {
-        if (artReady_) {
+        if (artReady_ && (pickup.GetType() == PickupType::Score || pickup.GetType() == PickupType::Shield)) {
             DrawTextureAsset(pickup.GetType() == PickupType::Score ? pickupScoreTexture_ : pickupShieldTexture_, pickup.GetPosition(), pickup.GetRadius() * 3.0f);
         } else {
             pickup.Draw();
@@ -733,8 +895,17 @@ void Game::DrawPlaying() const {
         if (player_.HasShield()) {
             DrawCircleLines(static_cast<int>(player_.GetPosition().x), static_cast<int>(player_.GetPosition().y), player_.GetRadius() + 22.0f, SKYBLUE);
         }
+        if (hitInvulnerability_ > 0.0f) {
+            DrawCircleLines(static_cast<int>(player_.GetPosition().x), static_cast<int>(player_.GetPosition().y), player_.GetRadius() + 28.0f, Fade(RAYWHITE, 0.55f));
+        }
     } else {
         player_.Draw();
+    }
+    DrawBossHealth();
+    DrawFloatingTexts();
+    DrawWaveBanner();
+    if (damageFlashTimer_ > 0.0f) {
+        DrawRectangle(0, 0, cfg::ScreenWidth, cfg::ScreenHeight, Fade(RED, damageFlashTimer_ * 1.4f));
     }
     DrawHud();
 }
@@ -807,19 +978,85 @@ void Game::DrawLeaderboard() const {
 }
 
 void Game::DrawHud() const {
-    DrawRectangle(14, 12, 260, 82, Fade(BLACK, 0.42f));
-    DrawRectangleLines(14, 12, 260, 82, Fade(RAYWHITE, 0.35f));
+    DrawRectangle(14, 12, 310, 112, Fade(BLACK, 0.46f));
+    DrawRectangleLines(14, 12, 310, 112, Fade(RAYWHITE, 0.35f));
 
     DrawText(TextFormat("Score: %d", score_), 28, 24, 22, RAYWHITE);
     DrawText(TextFormat("Best:  %d", highScore_), 28, 52, 20, GOLD);
-    DrawText(TextFormat("Time:  %.1f", survivedTime_), 150, 52, 20, LIGHTGRAY);
-    DrawText(TextFormat("Wave:  %d", currentWave_), 150, 76, 18, SKYBLUE);
+    DrawText(TextFormat("Lives: %d/%d", lives_, maxLives_), 28, 78, 20, lives_ <= 1 ? ORANGE : GREEN);
+    DrawText(TextFormat("Time: %.1f", survivedTime_), 172, 52, 20, LIGHTGRAY);
+    DrawText(TextFormat("Wave: %d", currentWave_), 172, 78, 20, SKYBLUE);
+    DrawText(TextFormat("Near: %d", nearMissCount_), 172, 100, 18, SKYBLUE);
 
-    if (player_.HasShield()) {
-        DrawText("SHIELD ACTIVE", cfg::ScreenWidth - 215, 24, 22, SKYBLUE);
+    DrawRectangle(cfg::ScreenWidth - 244, 12, 230, 130, Fade(BLACK, 0.42f));
+    DrawRectangleLines(cfg::ScreenWidth - 244, 12, 230, 130, Fade(RAYWHITE, 0.28f));
+    DrawText(TextFormat("Combo x%.1f", scoreMultiplier_), cfg::ScreenWidth - 230, 24, 24, scoreMultiplier_ > 1.0f ? GOLD : LIGHTGRAY);
+    if (comboTimer_ > 0.0f) {
+        const float fill = ClampFloat(comboTimer_ / 4.0f, 0.0f, 1.0f);
+        DrawRectangle(cfg::ScreenWidth - 230, 56, static_cast<int>(200.0f * fill), 8, GOLD);
+        DrawRectangleLines(cfg::ScreenWidth - 230, 56, 200, 8, Fade(RAYWHITE, 0.35f));
+    } else {
+        DrawText("Chain ready", cfg::ScreenWidth - 230, 52, 18, LIGHTGRAY);
     }
 
-    DrawText(TextFormat("Difficulty: %s", DifficultyDisplayName(saveData_.difficulty)), cfg::ScreenWidth - 210, 56, 18, LIGHTGRAY);
+    if (player_.HasShield()) {
+        DrawText("SHIELD ACTIVE", cfg::ScreenWidth - 230, 70, 18, SKYBLUE);
+    } else if (hitInvulnerability_ > 0.0f) {
+        DrawText("RECOVERING", cfg::ScreenWidth - 230, 70, 18, RAYWHITE);
+    }
+
+    if (rapidFireTimer_ > 0.0f) {
+        DrawText(TextFormat("RAPID %.1f", rapidFireTimer_), cfg::ScreenWidth - 230, 88, 16, LIME);
+    }
+    if (spreadShotTimer_ > 0.0f) {
+        DrawText(TextFormat("SPREAD %.1f", spreadShotTimer_), cfg::ScreenWidth - 230, 106, 16, VIOLET);
+    }
+
+    DrawText(TextFormat("Difficulty: %s", DifficultyDisplayName(saveData_.difficulty)), cfg::ScreenWidth - 230, 124, 16, LIGHTGRAY);
+}
+
+void Game::DrawBossHealth() const {
+    for (const Asteroid& asteroid : asteroids_) {
+        if (!IsBossType(asteroid.GetType())) {
+            continue;
+        }
+
+        const float ratio = ClampFloat(
+            static_cast<float>(asteroid.GetHealth()) / static_cast<float>(std::max(1, asteroid.GetMaxHealth())),
+            0.0f,
+            1.0f
+        );
+        const int width = 520;
+        const int x = cfg::ScreenWidth / 2 - width / 2;
+        const int y = 24;
+        DrawText("BOSS", x, y - 22, 20, VIOLET);
+        DrawRectangle(x, y, width, 14, Fade(BLACK, 0.65f));
+        DrawRectangle(x, y, static_cast<int>(static_cast<float>(width) * ratio), 14, ratio < 0.35f ? RED : VIOLET);
+        DrawRectangleLines(x, y, width, 14, Fade(RAYWHITE, 0.55f));
+        return;
+    }
+}
+
+void Game::DrawFloatingTexts() const {
+    for (const FloatingText& text : floatingTexts_) {
+        const float t = ClampFloat(text.age / text.duration, 0.0f, 1.0f);
+        const Color color = Fade(text.color, 1.0f - t * 0.75f);
+        const int fontSize = 20;
+        const int width = MeasureText(text.text.c_str(), fontSize);
+        DrawText(text.text.c_str(), static_cast<int>(text.position.x) - width / 2, static_cast<int>(text.position.y), fontSize, color);
+    }
+}
+
+void Game::DrawWaveBanner() const {
+    if (waveBannerTimer_ <= 0.0f || waveBannerText_.empty()) {
+        return;
+    }
+
+    const float alpha = ClampFloat(waveBannerTimer_ / 0.55f, 0.0f, 1.0f);
+    const int fontSize = waveBannerText_ == "BOSS WAVE" ? 52 : 44;
+    const int width = MeasureText(waveBannerText_.c_str(), fontSize);
+    DrawRectangle(0, 270, cfg::ScreenWidth, 86, Fade(BLACK, 0.38f * alpha));
+    DrawText(waveBannerText_.c_str(), cfg::ScreenWidth / 2 - width / 2, 288, fontSize, Fade(waveBannerText_ == "BOSS WAVE" ? RED : SKYBLUE, alpha));
 }
 
 void Game::DrawCenteredText(const std::string& text, int y, int fontSize, Color color) const {

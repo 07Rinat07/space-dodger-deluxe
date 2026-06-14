@@ -5,6 +5,7 @@
 class Bullet {
 public:
     Bullet(Vector2 position, float speed);
+    Bullet(Vector2 position, Vector2 velocity);
 
     void Update(float dt);
     void Draw() const;
@@ -15,6 +16,6 @@ public:
 
 private:
     Vector2 position_{};
-    float speed_{};
+    Vector2 velocity_{};
     float radius_{};
 };
